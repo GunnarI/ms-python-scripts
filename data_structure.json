@@ -1,0 +1,181 @@
+[
+    {
+        "SubjectID": "Subject00",
+        "Trials": [
+            {
+                "TrialID": "20190215",
+                "FramesPerSec": 100,
+                "AnalogFreq": 1000,
+                "EMGDevice": "Myon EMG - Voltage",
+                "NumEMG": 10,
+                "EMGProtocol": {
+                    "1": "GlutMax",
+                    "2": "RectFem",
+                    "3": "VasLat",
+                    "4": "VasMed",
+                    "5": "Semitend",
+                    "6": "BicFem",
+                    "7": "GasMed",
+                    "8": "GasLat",
+                    "9": "Soleus",
+                    "10": "TibAnt"
+                },
+                "Exercises": []
+            },
+            {
+                "TrialID": "20190330",
+                "FramesPerSec": 100,
+                "AnalogFreq": 1000,
+                "EMGDevice": "Myon EMG - Voltage",
+                "NumEMG": 8,
+                "EMGProtocol": {
+                    "1": "VasLat",
+                    "2": "GlutMax",
+                    "3": "RectFem",
+                    "4": "BisFem",
+                    "5": "GasMed",
+                    "6": "Semitend",
+                    "7": "Soleus",
+                    "8": "TibAnt"
+                },
+                "Exercises": []
+            }
+        ]
+    },
+    {
+        "SubjectID": "Subject01",
+        "Trials": [
+            {
+                "TrialID": "20190405",
+                "FramesPerSec": 100,
+                "AnalogFreq": 1000,
+                "EMGDevice": "Myon EMG - Voltage",
+                "NumEMG": 10,
+                "EMGProtocol": {
+                    "1": "GlutMax",
+                    "2": "VasLat",
+                    "3": "RectFem",
+                    "4": "VasMed",
+                    "5": "Semitend",
+                    "6": "BisFem",
+                    "7": "GasMed",
+                    "8": "GasLat",
+                    "9": "Soleus",
+                    "10": "TibAnt"
+                },
+                "Exercises": [
+                    {
+                        "ExerciseID": "Subject01 Squat01",
+                        "Type": "emg_only",
+                        "File": "C:\\Users\\Gunnar\\Google Drive\\MSThesis\\Data\\Subject01\\20190405\\Subject01\\Subject01 Squat01.csv"
+                    },
+                    {
+                        "ExerciseID": "Subject01 Walk07",
+                        "Type": "inverse_dynamics",
+                        "File": "C:\\Users\\Gunnar\\Google Drive\\MSThesis\\Data\\Subject01\\20190405\\Subject01\\Subject01 Walk07.csv"
+                    },
+                    {
+                        "ExerciseID": "Subject01 Walk08",
+                        "Type": "inverse_dynamics",
+                        "File": "C:\\Users\\Gunnar\\Google Drive\\MSThesis\\Data\\Subject01\\20190405\\Subject01\\Subject01 Walk08.csv"
+                    },
+                    {
+                        "ExerciseID": "Subject01 Walk09",
+                        "Type": "inverse_dynamics",
+                        "File": "C:\\Users\\Gunnar\\Google Drive\\MSThesis\\Data\\Subject01\\20190405\\Subject01\\Subject01 Walk09.csv"
+                    },
+                    {
+                        "ExerciseID": "Subject01 Walk11",
+                        "Type": "inverse_dynamics",
+                        "File": "C:\\Users\\Gunnar\\Google Drive\\MSThesis\\Data\\Subject01\\20190405\\Subject01\\Subject01 Walk11.csv"
+                    },
+                    {
+                        "ExerciseID": "Subject01 Walk12",
+                        "Type": "inverse_dynamics",
+                        "File": "C:\\Users\\Gunnar\\Google Drive\\MSThesis\\Data\\Subject01\\20190405\\Subject01\\Subject01 Walk12.csv"
+                    },
+                    {
+                        "ExerciseID": "Subject01 Walk14",
+                        "Type": "inverse_dynamics",
+                        "File": "C:\\Users\\Gunnar\\Google Drive\\MSThesis\\Data\\Subject01\\20190405\\Subject01\\Subject01 Walk14.csv"
+                    },
+                    {
+                        "ExerciseID": "Subject01 Walk15",
+                        "Type": "inverse_dynamics",
+                        "File": "C:\\Users\\Gunnar\\Google Drive\\MSThesis\\Data\\Subject01\\20190405\\Subject01\\Subject01 Walk15.csv"
+                    },
+                    {
+                        "ExerciseID": "Subject01 Walk16",
+                        "Type": "inverse_dynamics",
+                        "File": "C:\\Users\\Gunnar\\Google Drive\\MSThesis\\Data\\Subject01\\20190405\\Subject01\\Subject01 Walk16.csv"
+                    },
+                    {
+                        "ExerciseID": "Subject01 Walk17",
+                        "Type": "inverse_dynamics",
+                        "File": "C:\\Users\\Gunnar\\Google Drive\\MSThesis\\Data\\Subject01\\20190405\\Subject01\\Subject01 Walk17.csv"
+                    },
+                    {
+                        "ExerciseID": "Subject01 Walk20",
+                        "Type": "inverse_dynamics",
+                        "File": "C:\\Users\\Gunnar\\Google Drive\\MSThesis\\Data\\Subject01\\20190405\\Subject01\\Subject01 Walk20.csv"
+                    },
+                    {
+                        "ExerciseID": "Subject01 Walk21",
+                        "Type": "inverse_dynamics",
+                        "File": "C:\\Users\\Gunnar\\Google Drive\\MSThesis\\Data\\Subject01\\20190405\\Subject01\\Subject01 Walk21.csv"
+                    },
+                    {
+                        "ExerciseID": "Subject01 Walk22",
+                        "Type": "inverse_dynamics",
+                        "File": "C:\\Users\\Gunnar\\Google Drive\\MSThesis\\Data\\Subject01\\20190405\\Subject01\\Subject01 Walk22.csv"
+                    },
+                    {
+                        "ExerciseID": "Subject01 Walk23",
+                        "Type": "inverse_dynamics",
+                        "File": "C:\\Users\\Gunnar\\Google Drive\\MSThesis\\Data\\Subject01\\20190405\\Subject01\\Subject01 Walk23.csv"
+                    },
+                    {
+                        "ExerciseID": "Subject01 Walk24",
+                        "Type": "inverse_dynamics",
+                        "File": "C:\\Users\\Gunnar\\Google Drive\\MSThesis\\Data\\Subject01\\20190405\\Subject01\\Subject01 Walk24.csv"
+                    },
+                    {
+                        "ExerciseID": "Subject01 Walk26",
+                        "Type": "inverse_dynamics",
+                        "File": "C:\\Users\\Gunnar\\Google Drive\\MSThesis\\Data\\Subject01\\20190405\\Subject01\\Subject01 Walk26.csv"
+                    },
+                    {
+                        "ExerciseID": "Subject01 Walk27",
+                        "Type": "inverse_dynamics",
+                        "File": "C:\\Users\\Gunnar\\Google Drive\\MSThesis\\Data\\Subject01\\20190405\\Subject01\\Subject01 Walk27.csv"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "SubjectID": "Subject02",
+        "Trials": [
+            {
+                "TrialID": "20190406",
+                "FramesPerSec": 100,
+                "AnalogFreq": 1000,
+                "EMGDevice": "Myon EMG - Voltage",
+                "NumEMG": 10,
+                "EMGProtocol": {
+                    "1": "GlutMax",
+                    "2": "VasLat",
+                    "3": "RectFem",
+                    "4": "VasMed",
+                    "5": "Semitend",
+                    "6": "BisFem",
+                    "7": "GasMed",
+                    "8": "GasLat",
+                    "9": "Soleus",
+                    "10": "TibAnt"
+                },
+                "Exercises": []
+            }
+        ]
+    }
+]
