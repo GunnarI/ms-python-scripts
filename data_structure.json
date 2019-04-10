@@ -148,6 +148,21 @@
                         "ExerciseID": "Subject01 Walk27",
                         "Type": "inverse_dynamics",
                         "File": "C:\\Users\\Gunnar\\Google Drive\\MSThesis\\Data\\Subject01\\20190405\\Subject01\\Subject01 Walk27.csv"
+                    },
+                    {
+                        "ExerciseID": "Subject01 Flexing01",
+                        "Type": "emg_only",
+                        "File": "C:\\Users\\Gunnar\\Google Drive\\MSThesis\\Data\\Subject01\\20190405\\Subject01\\Subject01 Flexing01.csv"
+                    },
+                    {
+                        "ExerciseID": "Subject01 HeelRaise01",
+                        "Type": "emg_only",
+                        "File": "C:\\Users\\Gunnar\\Google Drive\\MSThesis\\Data\\Subject01\\20190405\\Subject01\\Subject01 HeelRaise01.csv"
+                    },
+                    {
+                        "ExerciseID": "Subject01 Jump01",
+                        "Type": "emg_only",
+                        "File": "C:\\Users\\Gunnar\\Google Drive\\MSThesis\\Data\\Subject01\\20190405\\Subject01\\Subject01 Jump01.csv"
                     }
                 ]
             }
