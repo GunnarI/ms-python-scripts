@@ -13,23 +13,23 @@ class DataManager:
             self.data_struct = json.load(ds)
 
     def update_data_structure(self):
-        #with open('./data_structure.json','r+') as ds:
-        #    update_ds = json.load(ds)
-
         subject_folders = Path(self.base_dir).glob('Subject*')
         subject_ids = get_list_of_subject_ids(self.data_struct)
 
         for folder in subject_folders:
             subject_id = folder.stem
-            print(subject_id)
 
             if subject_id not in subject_ids:
                 self.data_struct.append(create_subject(self.base_dir, subject_id))
+            else:
+                i = subject_ids.index(subject_id)
+                self.data_struct[i] = update_subject(self.base_dir + '\\' + subject_id, self.data_struct[i])
 
         with open('./data_structure.json', 'w') as ds:
             json.dump(self.data_struct, ds, indent=4)
 
     def load_emg(self, subject_id, trial_id):
+        emg_data_dict = {}
         for subject in self.data_struct:
             if subject["SubjectID"] == subject_id:
                 for trial in subject["Trials"]:
@@ -38,10 +38,18 @@ class DataManager:
                         num_emg = trial["NumEMG"]
                         frame_freq = trial["FramesPerSec"]
                         analog_freq = trial["AnalogFreq"]
-                        for exercise in trial["Exercises"]:
-                            self.exercise_list
-                            get_emg_from_csv(exercise["ExerciseID"], emg_device, num_emg, frame_freq, analog_freq)
 
+                        for exercise in trial["Exercises"]:
+                            trial_exercise_id = trial_id + ' ' + exercise["ExerciseID"]
+                            emg_array_dir = "./data/" + trial_exercise_id + ".txt"
+                            if os.path.isfile(emg_array_dir):
+                                emg_data_dict[trial_exercise_id] = np.loadtxt(emg_array_dir)
+                            else:
+                                emg_data = \
+                                    get_emg_from_csv(exercise["File"], emg_device, num_emg, frame_freq, analog_freq)
+                                emg_data_dict[trial_exercise_id] = emg_data
+                                np.savetxt(emg_array_dir, emg_data, fmt='%f')
+        return emg_data_dict
 
 #Creates the new subject dictionary including all trials and experiments
 def create_subject(path, subject_id):
@@ -67,7 +75,55 @@ def create_subject(path, subject_id):
 
     return {"SubjectID": subject_id, "Trials": trials}
 
-#def create_trial()
+
+def update_subject(path, subject):
+    trial_ids = get_list_of_trial_ids(subject)
+    trial_folders = Path(path).glob('*')
+    for folder in trial_folders:
+        trial_id = folder.stem
+
+        if trial_id not in trial_ids:
+            subject["Trials"].append(create_trial(str(folder), subject["SubjectID"]))
+        else:
+            i = trial_ids.index(trial_id)
+            subject["Trials"][i]["Exercises"] = \
+                update_exercises(str(folder) + '\\' + subject["SubjectID"], subject["Trials"][i])
+
+    return subject
+
+
+def create_trial(path, subject_id):
+    with open(path + '\\trial_config.json', 'r') as tc:
+        trial = json.load(tc)
+
+    exercises = []
+    exercise_files = Path(path + '\\' + subject_id).glob('*.csv')
+    for file in exercise_files:
+        exercise_name = file.stem
+        if 'walk' in exercise_name.lower():
+            ex_type = 'inverse_dynamics'
+        else:
+            ex_type = 'emg_only'
+        exercises.append({"ExerciseID": exercise_name, "Type": ex_type, "File": str(file)})
+
+    trial['Exercises'] = exercises
+
+    return trial
+
+
+def update_exercises(path, trial):
+    exercise_ids = get_list_of_exercise_ids(trial)
+    exercise_files = Path(path).glob('*.csv')
+    for file in exercise_files:
+        exercise_id = file.stem
+        if exercise_id not in exercise_ids:
+            if 'walk' in exercise_id.lower():
+                ex_type = 'inverse_dynamics'
+            else:
+                ex_type = 'emg_only'
+            trial["Exercises"].append({"ExerciseID": exercise_id, "Type": ex_type, "File": str(file)})
+
+    return trial["Exercises"]
 
 def get_list_of_subject_ids(data_structure):
     subject_ids = []
@@ -75,6 +131,28 @@ def get_list_of_subject_ids(data_structure):
         subject_ids.append(subject["SubjectID"])
 
     return subject_ids
+
+
+def get_list_of_trial_ids(subject):
+    trial_ids = []
+    for trial in subject["Trials"]:
+        trial_ids.append(trial["TrialID"])
+
+    return trial_ids
+
+
+def get_list_of_exercise_ids(trial):
+    exercise_ids = []
+    for exercise in trial["Exercises"]:
+        exercise_ids.append(exercise["ExerciseID"])
+
+    return exercise_ids
+
+
+def get_subject_structure(data_structure, subject_id):
+    for subject in data_structure:
+        if subject["SubjectID"] == subject_id:
+            return subject
 
 
 def get_emg_from_csv(file, emg_device, num_emg, frame_freq, analog_freq):
@@ -103,7 +181,7 @@ def get_emg_from_csv(file, emg_device, num_emg, frame_freq, analog_freq):
         next(reader)
 
         for line in reader:
-            if not line:
+            if len(line) < num_emg + 1:
                 f.close()
                 break
             else:
@@ -113,7 +191,8 @@ def get_emg_from_csv(file, emg_device, num_emg, frame_freq, analog_freq):
     t = (emg_data[:,0] + (emg_data[:,1] / (analog_freq / frame_freq))) / frame_freq
 
     #return headers, t, emg_data[:,2:]
-    return t, emg_data[:, 2:]
+    #return t, emg_data[:, 2:]
+    return np.concatenate((t.reshape(t.shape[0],1), emg_data[:, 2:]), axis=1)
 
 
 
