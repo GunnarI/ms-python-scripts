@@ -2,12 +2,14 @@ import os
 import sys
 import csv
 import json
-from pathlib import Path, PurePath
+from pathlib import Path
 import numpy as np
+
 
 class DataManager:
     def __init__(self, base_dir):
         self.base_dir = base_dir
+        self.emg_data_dict = {}
 
         with open('./data_structure.json','r') as ds:
             self.data_struct = json.load(ds)
@@ -28,8 +30,15 @@ class DataManager:
         with open('./data_structure.json', 'w') as ds:
             json.dump(self.data_struct, ds, indent=4)
 
-    def load_emg(self, subject_id, trial_id):
-        emg_data_dict = {}
+    def load_emg(self, subject_id, trial_id, reload=False):
+        """Loads the raw emg data either from the original csv file or previously saved txt file.
+        If txt file does not already exist then a new one is saved. All emg data (both from csv and txt files) is added
+        to the DataManager.emg_data_dict dictionary, each exercise with the key "<TrialID> <SubjectID> <ExerciseID>".
+        :param subject_id: the subject id from the data structure (e.g. "Subject01")
+        :param trial_id: the trial id from the data structure (e.g. "20190405")
+        :param reload: if True then the already saved txt files are overridden with values from the csv
+        :return: nothing, only updates the class variable DataManager.emg_data_dict
+        """
         for subject in self.data_struct:
             if subject["SubjectID"] == subject_id:
                 for trial in subject["Trials"]:
@@ -40,38 +49,24 @@ class DataManager:
                         analog_freq = trial["AnalogFreq"]
 
                         for exercise in trial["Exercises"]:
-                            trial_exercise_id = trial_id + ' ' + exercise["ExerciseID"]
-                            emg_array_dir = "./data/" + trial_exercise_id + ".txt"
-                            if os.path.isfile(emg_array_dir):
-                                emg_data_dict[trial_exercise_id] = np.loadtxt(emg_array_dir)
+                            trial_exercise_id = trial_id + ' ' + subject_id + ' ' + exercise["ExerciseID"]
+                            emg_array_dir = './data/' + trial_exercise_id + '.txt'
+                            if os.path.isfile(emg_array_dir) and not reload:
+                                self.emg_data_dict[trial_exercise_id] = np.loadtxt(emg_array_dir)
                             else:
-                                emg_data = \
-                                    get_emg_from_csv(exercise["File"], emg_device, num_emg, frame_freq, analog_freq)
-                                emg_data_dict[trial_exercise_id] = emg_data
+                                emg_data = get_emg_from_csv(exercise["File"],
+                                                            emg_device, num_emg, frame_freq, analog_freq)
+                                self.emg_data_dict[trial_exercise_id] = emg_data
                                 np.savetxt(emg_array_dir, emg_data, fmt='%f')
-        return emg_data_dict
 
-#Creates the new subject dictionary including all trials and experiments
+
+# Creates the new subject dictionary including all trials and experiments
 def create_subject(path, subject_id):
     trials = []
     trial_folders = Path(path + '\\' + subject_id).glob('*')
     for folder in trial_folders:
         trial_id = str(folder)
-        with open(trial_id + '\\trial_config.json', 'r') as tc:
-            trial = json.load(tc)
-
-        exercises = []
-        exercise_files = Path(trial_id + '\\' + subject_id).glob('*.csv')
-        for file in exercise_files:
-            exercise_name = file.stem
-            if 'walk' in exercise_name.lower():
-                type = 'inverse_dynamics'
-            else:
-                type = 'emg_only'
-            exercises.append({"ExerciseID": exercise_name, "Type": type, "File": str(file)})
-
-        trial['Exercises'] = exercises
-        trials.append(trial)
+        trials.append(create_trial(trial_id, subject_id))
 
     return {"SubjectID": subject_id, "Trials": trials}
 
@@ -87,7 +82,7 @@ def update_subject(path, subject):
         else:
             i = trial_ids.index(trial_id)
             subject["Trials"][i]["Exercises"] = \
-                update_exercises(str(folder) + '\\' + subject["SubjectID"], subject["Trials"][i])
+                update_exercises(str(folder) + '\\' + subject["SubjectID"], subject["Trials"][i], subject["SubjectID"])
 
     return subject
 
@@ -99,7 +94,7 @@ def create_trial(path, subject_id):
     exercises = []
     exercise_files = Path(path + '\\' + subject_id).glob('*.csv')
     for file in exercise_files:
-        exercise_name = file.stem
+        exercise_name = file.stem.replace(subject_id + ' ', '')
         if 'walk' in exercise_name.lower():
             ex_type = 'inverse_dynamics'
         else:
@@ -111,11 +106,11 @@ def create_trial(path, subject_id):
     return trial
 
 
-def update_exercises(path, trial):
+def update_exercises(path, trial, subject_id):
     exercise_ids = get_list_of_exercise_ids(trial)
     exercise_files = Path(path).glob('*.csv')
     for file in exercise_files:
-        exercise_id = file.stem
+        exercise_id = file.stem.replace(subject_id + ' ', '')
         if exercise_id not in exercise_ids:
             if 'walk' in exercise_id.lower():
                 ex_type = 'inverse_dynamics'
@@ -124,6 +119,7 @@ def update_exercises(path, trial):
             trial["Exercises"].append({"ExerciseID": exercise_id, "Type": ex_type, "File": str(file)})
 
     return trial["Exercises"]
+
 
 def get_list_of_subject_ids(data_structure):
     subject_ids = []
@@ -190,9 +186,4 @@ def get_emg_from_csv(file, emg_device, num_emg, frame_freq, analog_freq):
     emg_data = np.array(emg_data, dtype=np.float)
     t = (emg_data[:,0] + (emg_data[:,1] / (analog_freq / frame_freq))) / frame_freq
 
-    #return headers, t, emg_data[:,2:]
-    #return t, emg_data[:, 2:]
     return np.concatenate((t.reshape(t.shape[0],1), emg_data[:, 2:]), axis=1)
-
-
-
