@@ -3,3 +3,4 @@ __pycache__
 venv/
 temporary.py
 data/
+figures/
