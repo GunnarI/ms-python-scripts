@@ -10,8 +10,9 @@ class DataManager:
     def __init__(self, base_dir):
         self.base_dir = base_dir
         self.emg_data_dict = {}
+        self.torque_data_dict = {}
 
-        with open('./data_structure.json','r') as ds:
+        with open('./data_structure.json', 'r') as ds:
             self.data_struct = json.load(ds)
 
     def update_data_structure(self):
@@ -30,14 +31,15 @@ class DataManager:
         with open('./data_structure.json', 'w') as ds:
             json.dump(self.data_struct, ds, indent=4)
 
-    def load_emg(self, subject_id, trial_id, reload=False):
+    def load_emg_and_torque(self, subject_id, trial_id, reload=False):
         """Loads the raw emg data either from the original csv file or previously saved txt file.
         If txt file does not already exist then a new one is saved. All emg data (both from csv and txt files) is added
         to the DataManager.emg_data_dict dictionary, each exercise with the key "<TrialID> <SubjectID> <ExerciseID>".
+        Same goes for the torque data and DataManager.torque_data_dict.
         :param subject_id: the subject id from the data structure (e.g. "Subject01")
         :param trial_id: the trial id from the data structure (e.g. "20190405")
         :param reload: if True then the already saved txt files are overridden with values from the csv
-        :return: nothing, only updates the class variable DataManager.emg_data_dict
+        :return: nothing, only updates the class variables DataManager.emg_data_dict and DataManager.torque_data_dict
         """
         for subject in self.data_struct:
             if subject["SubjectID"] == subject_id:
@@ -51,13 +53,38 @@ class DataManager:
                         for exercise in trial["Exercises"]:
                             trial_exercise_id = trial_id + ' ' + subject_id + ' ' + exercise["ExerciseID"]
                             emg_array_dir = './data/' + trial_exercise_id + '.txt'
-                            if os.path.isfile(emg_array_dir) and not reload:
-                                self.emg_data_dict[trial_exercise_id] = np.loadtxt(emg_array_dir)
+
+                            if 'walk' in exercise["ExerciseID"].lower():
+                                t1, t2 = get_fp_time_frame(exercise["File"])
+
+                                # Load emg data
+                                if os.path.isfile(emg_array_dir) and not reload:
+                                    self.emg_data_dict[trial_exercise_id] = np.loadtxt(emg_array_dir)
+                                else:
+                                    emg_data = get_emg_from_csv(exercise["File"], emg_device, num_emg, frame_freq,
+                                                                analog_freq, t1, t2)
+                                    self.emg_data_dict[trial_exercise_id] = emg_data
+                                    np.savetxt(emg_array_dir, emg_data, fmt='%f')
+
+                                # Load torque data
+                                torque_array_dir = './data/labels/' + trial_exercise_id + '.txt'
+                                if os.path.isfile(torque_array_dir) and not reload:
+                                    self.torque_data_dict[trial_exercise_id] = np.loadtxt(torque_array_dir)
+                                else:
+                                    torque_data = get_torque_from_csv(exercise["File"],
+                                                                      subject_id + ':RKneeMoment',
+                                                                      ['X', 'Y', 'Z'],
+                                                                      frame_freq, t1, t2)
+                                    self.torque_data_dict[trial_exercise_id] = torque_data
+                                    np.savetxt(torque_array_dir, torque_data, fmt='%f')
                             else:
-                                emg_data = get_emg_from_csv(exercise["File"],
-                                                            emg_device, num_emg, frame_freq, analog_freq)
-                                self.emg_data_dict[trial_exercise_id] = emg_data
-                                np.savetxt(emg_array_dir, emg_data, fmt='%f')
+                                if os.path.isfile(emg_array_dir) and not reload:
+                                    self.emg_data_dict[trial_exercise_id] = np.loadtxt(emg_array_dir)
+                                else:
+                                    emg_data = get_emg_from_csv(exercise["File"],
+                                                                emg_device, num_emg, frame_freq, analog_freq)
+                                    self.emg_data_dict[trial_exercise_id] = emg_data
+                                    np.savetxt(emg_array_dir, emg_data, fmt='%f')
 
 
 # Creates the new subject dictionary including all trials and experiments
@@ -151,7 +178,61 @@ def get_subject_structure(data_structure, subject_id):
             return subject
 
 
-def get_emg_from_csv(file, emg_device, num_emg, frame_freq, analog_freq):
+def get_torque_from_csv(file, torque_id, axises, frame_freq, t1, t2):
+    if not os.path.exists(file):
+        raise Exception('The file ' + file + ' could not be found!')
+
+    try:
+        f = open(file, 'r')
+    except IOError:
+        print('Could not read file: ', file)
+        sys.exit()
+
+    torque_data = []
+    with f:
+        fl = f.readline()
+        while 'Model' not in fl:
+            fl = f.readline()
+
+        f.__next__()
+
+        reader = csv.reader(f, delimiter=',')
+
+        first_col = next(reader).index(torque_id)
+        next(reader)
+        next(reader)
+
+        if t1 and t2:
+            start = False
+            stop = False
+            for line in reader:
+                if line[0] == t1 and not start:
+                    start = True
+                elif line[0] == t2 and start:
+                    stop = True
+                elif not start:
+                    continue
+
+                if len(line) < 10 or stop:
+                    f.close()
+                    break
+                elif start:
+                    torque_data.append(line[:2] + line[first_col:first_col + len(axises)])
+        else:
+            for line in reader:
+                if len(line) < 10:
+                    f.close()
+                    break
+                else:
+                    torque_data.append(line[:2] + line[first_col:first_col + len(axises)])
+
+    torque_data = np.array(torque_data, dtype=np.float)
+    t = (torque_data[:, 0] / frame_freq)
+
+    return np.concatenate((t.reshape(t.shape[0], 1), torque_data[:, 2:]), axis=1)
+
+
+def get_emg_from_csv(file, emg_device, num_emg, frame_freq, analog_freq, t1=None, t2=None):
     if not os.path.exists(file):
         raise Exception('The file ' + file + ' could not be found!')
 
@@ -164,26 +245,99 @@ def get_emg_from_csv(file, emg_device, num_emg, frame_freq, analog_freq):
     emg_data = []
     with f:
         fl = f.readline()
-        while not 'Devices' in fl:
+        while 'Devices' not in fl:
             fl = f.readline()
 
         f.__next__()
 
         reader = csv.reader(f, delimiter=',')
 
-        first_col = next(reader).index(emg_device)
-        headers = next(reader)
-        headers = ['Time'] + headers[first_col:first_col+num_emg]
+        devices = next(reader)
+        emg_first_col = devices.index(emg_device)
+        # headers = next(reader)
+        # headers = ['Time'] + headers[emg_first_col:emg_first_col+num_emg]
+        next(reader)
         next(reader)
 
-        for line in reader:
-            if len(line) < num_emg + 1:
-                f.close()
-                break
-            else:
-                emg_data.append(line[:2] + line[first_col:first_col+num_emg])
+        if t1 and t2:
+            start = False
+            stop = False
+            for line in reader:
+                if line[0] == t1 and not start:
+                    start = True
+                elif line[0] == t2 and start:
+                    stop = True
+                elif not start:
+                    continue
+
+                if len(line) < num_emg + 1 or stop:
+                    f.close()
+                    break
+                elif start:
+                    emg_data.append(line[:2] + line[emg_first_col:emg_first_col + num_emg])
+        else:
+            for line in reader:
+                if len(line) < num_emg + 1:
+                    f.close()
+                    break
+                else:
+                    emg_data.append(line[:2] + line[emg_first_col:emg_first_col + num_emg])
 
     emg_data = np.array(emg_data, dtype=np.float)
-    t = (emg_data[:,0] + (emg_data[:,1] / (analog_freq / frame_freq))) / frame_freq
+    t = (emg_data[:, 0] + (emg_data[:, 1] / (analog_freq / frame_freq))) / frame_freq
 
-    return np.concatenate((t.reshape(t.shape[0],1), emg_data[:, 2:]), axis=1)
+    return np.concatenate((t.reshape(t.shape[0], 1), emg_data[:, 2:]), axis=1)
+
+
+def get_fp_time_frame(file, fp_slack=10**-6):
+    """Checks the activity of the force plates and returns the time frame (start frame and end frame) where they are
+    active
+
+    :param file: the full path to the csv file
+    :param fp_slack: sets the force plate activity threshold value (default 10^-6)
+    :return: the strings t1, t2 which are respectively the start frame and the stop frame of force plate activity
+    """
+    if not os.path.exists(file):
+        raise Exception('The file ' + file + ' could not be found!')
+
+    try:
+        f = open(file, 'r')
+    except IOError:
+        print('Could not read file: ', file)
+        sys.exit()
+
+    t1 = 0.0
+    t2 = 0.0
+    with f:
+        fl = f.readline()
+        while 'Devices' not in fl:
+            fl = f.readline()
+
+        f.__next__()
+
+        reader = csv.reader(f, delimiter=',')
+
+        devices = next(reader)
+        fp_col = [i for i, s in enumerate(devices) if ' - Force' in s]
+        next(reader)
+        next(reader)
+
+        start = False
+        stop = False
+        buffer = 0
+        for line in reader:
+            fp_val = np.fabs(np.array([line[i:i+3] for i in fp_col], dtype=np.float))
+
+            if stop:
+                f.close()
+                break
+            elif not start and np.any(fp_val > np.ones(fp_val.shape)*fp_slack):
+                start = True
+                t1 = line[0]
+            elif start:
+                if np.all(fp_val < np.ones(fp_val.shape)*fp_slack) and buffer > 100:
+                    stop = True
+                    t2 = str(int(line[0]) + (int(line[1]) > 0))
+                else:
+                    buffer = buffer + 1
+    return t1, t2
