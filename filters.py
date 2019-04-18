@@ -20,8 +20,8 @@ def fourier_trans(data):
     return np.fft.fft(data)
 
 
-def t_vec_after_ma(N, t):
-    t = t[int(np.floor(N / 2)): int(len(t) - (np.ceil((N / 2) - 1)))]
+def t_vec_after_ma(n, t):
+    t = t[int(np.floor(n / 2)): int(len(t) - (np.ceil((n / 2) - 1)))]
     return t
 
 
@@ -45,13 +45,13 @@ def get_max_emg_array(max_emg_values, max_emg_exercise, emg_data, exercise_id, e
     return max_emg_values, max_emg_exercise
 
 
-def save_np_dict_to_txt(dict, base_dir, data_fmt, headers=None):
-    for key in dict:
+def save_np_dict_to_txt(dict_to_save, base_dir, data_fmt, headers=None):
+    for key in dict_to_save:
         if headers:
-            np.savetxt(base_dir + key + '.txt', dict[key], fmt=data_fmt,
+            np.savetxt(base_dir + key + '.txt', dict_to_save[key], fmt=data_fmt,
                        header=' '.join(emg_id for emg_id in headers[key]))
         else:
-            np.savetxt(base_dir + key + '.txt', dict[key], fmt=data_fmt)
+            np.savetxt(base_dir + key + '.txt', dict_to_save[key], fmt=data_fmt)
 
 
 def normalize_emg(emg_data_dict, max_emg_dict):
@@ -64,7 +64,7 @@ def normalize_emg(emg_data_dict, max_emg_dict):
     return emg_data_dict
 
 
-def filter_emg(emg_data_dict, lowpass, highpass, window, fs):
+def filter_emg(emg_data_dict, low_pass, high_pass, window, fs):
     emg_filt_data_dict = {}
     max_emg_values_dict = {}
     max_emg_exercises_dict = {}
@@ -73,11 +73,11 @@ def filter_emg(emg_data_dict, lowpass, highpass, window, fs):
         num_emg = len(emg_data_dict[key][0]) - 1
         t = emg_data_dict[key][:, 0]
         t_short = t_vec_after_ma(window, t)
-        filtered_emg = np.zeros(shape= (len(t_short), num_emg + 1))
+        filtered_emg = np.zeros(shape=(len(t_short), num_emg + 1))
         i = 0
         filtered_emg[:, i] = t_short
         for column in emg_data_dict[key][:, 1:].T:
-            column = noise_filter(column, lowpass, highpass, fs)
+            column = noise_filter(column, low_pass, high_pass, fs)
             column = demodulation(column)
             column, t = smoothing(column, t, window, fs)
             column = relinearization(column)
@@ -124,10 +124,10 @@ def demodulation(data):
 
 
 def smoothing(data, t, window, fs):
-    N = int(fs * (window / 1000.0))
+    n = int(fs * (window / 1000.0))
     data_sum = np.cumsum(np.insert(data, 0, 0))
-    smoothed_data = (data_sum[N:] - data_sum[:-N]) / float(N)
-    return smoothed_data, t_vec_after_ma(N, t)
+    smoothed_data = (data_sum[n:] - data_sum[:-n]) / float(n)
+    return smoothed_data, t_vec_after_ma(n, t)
 
 
 def relinearization(data):
