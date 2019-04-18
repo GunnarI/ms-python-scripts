@@ -64,19 +64,19 @@ def normalize_emg(emg_data_dict, max_emg_dict):
     return emg_data_dict
 
 
-def filter_emg(emg_data_dict, low_pass, high_pass, window, fs):
+def filter_emg(emg_data_dict, low_pass, high_pass, window, fs, cut_time=False):
     emg_filt_data_dict = {}
     max_emg_values_dict = {}
     max_emg_exercises_dict = {}
     for key in emg_data_dict:
         ids = key.split()
-        num_emg = len(emg_data_dict[key][0]) - 1
-        t = emg_data_dict[key][:, 0]
+        num_emg = len(emg_data_dict[key]["data"][0, :]) - 1
+        t = emg_data_dict[key]["data"][:, 0]
         t_short = t_vec_after_ma(window, t)
         filtered_emg = np.zeros(shape=(len(t_short), num_emg + 1))
         i = 0
         filtered_emg[:, i] = t_short
-        for column in emg_data_dict[key][:, 1:].T:
+        for column in emg_data_dict[key]["data"][:, 1:].T:
             column = noise_filter(column, low_pass, high_pass, fs)
             column = demodulation(column)
             column, t = smoothing(column, t, window, fs)
@@ -98,6 +98,12 @@ def filter_emg(emg_data_dict, low_pass, high_pass, window, fs):
             max_emg_values_dict[max_emg_key],
             max_emg_exercises_dict[max_emg_key],
             filtered_emg[:, 1:], ids[2], 'walk')
+
+        if cut_time and 'walk' in key.lower():
+            t1 = emg_data_dict[key]["t1"]
+            t2 = emg_data_dict[key]["t2"]
+            emg_filt_data_dict[key + ' filtered'] = filtered_emg[
+                                                    (filtered_emg[:, 0] >= t1) & (filtered_emg[:, 0] <= t2), :]
 
     # Save the max emg values to a txt file
     save_np_dict_to_txt(max_emg_values_dict, './data/', data_fmt='%f', headers=max_emg_exercises_dict)

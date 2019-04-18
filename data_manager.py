@@ -55,35 +55,37 @@ class DataManager:
                             emg_array_dir = './data/' + trial_exercise_id + '.txt'
 
                             if 'walk' in exercise["ExerciseID"].lower():
-                                t1, t2 = get_fp_time_frame(exercise["File"])
+                                t1, t2 = get_fp_time_frame(exercise["File"], frame_freq)
 
                                 # Load emg data
                                 if os.path.isfile(emg_array_dir) and not reload:
-                                    self.emg_data_dict[trial_exercise_id] = np.loadtxt(emg_array_dir)
+                                    self.emg_data_dict[trial_exercise_id] = {"data": np.loadtxt(emg_array_dir),
+                                                                             "t1": t1, "t2": t2}
                                 else:
                                     emg_data = get_emg_from_csv(exercise["File"], emg_device, num_emg, frame_freq,
-                                                                analog_freq, t1, t2)
-                                    self.emg_data_dict[trial_exercise_id] = emg_data
+                                                                analog_freq)
+                                    self.emg_data_dict[trial_exercise_id] = {"data": emg_data, "t1": t1, "t2": t2}
                                     np.savetxt(emg_array_dir, emg_data, fmt='%f')
 
                                 # Load torque data
                                 torque_array_dir = './data/labels/' + trial_exercise_id + '.txt'
                                 if os.path.isfile(torque_array_dir) and not reload:
-                                    self.torque_data_dict[trial_exercise_id] = np.loadtxt(torque_array_dir)
+                                    self.torque_data_dict[trial_exercise_id] = {"data": np.loadtxt(torque_array_dir),
+                                                                                "t1": t1, "t2": t2}
                                 else:
                                     torque_data = get_torque_from_csv(exercise["File"],
                                                                       subject_id + ':RKneeMoment',
                                                                       ['X', 'Y', 'Z'],
-                                                                      frame_freq, t1, t2)
-                                    self.torque_data_dict[trial_exercise_id] = torque_data
+                                                                      frame_freq)
+                                    self.torque_data_dict[trial_exercise_id] = {"data": torque_data, "t1": t1, "t2": t2}
                                     np.savetxt(torque_array_dir, torque_data, fmt='%f')
                             else:
                                 if os.path.isfile(emg_array_dir) and not reload:
-                                    self.emg_data_dict[trial_exercise_id] = np.loadtxt(emg_array_dir)
+                                    self.emg_data_dict[trial_exercise_id] = {"data": np.loadtxt(emg_array_dir)}
                                 else:
                                     emg_data = get_emg_from_csv(exercise["File"],
                                                                 emg_device, num_emg, frame_freq, analog_freq)
-                                    self.emg_data_dict[trial_exercise_id] = emg_data
+                                    self.emg_data_dict[trial_exercise_id] = {"data": emg_data}
                                     np.savetxt(emg_array_dir, emg_data, fmt='%f')
 
 
@@ -178,7 +180,7 @@ def get_subject_structure(data_structure, subject_id):
             return subject
 
 
-def get_torque_from_csv(file, torque_id, axises, frame_freq, t1, t2):
+def get_torque_from_csv(file, torque_id, axises, frame_freq):
     if not os.path.exists(file):
         raise Exception('The file ' + file + ' could not be found!')
 
@@ -202,29 +204,12 @@ def get_torque_from_csv(file, torque_id, axises, frame_freq, t1, t2):
         next(reader)
         next(reader)
 
-        if t1 and t2:
-            start = False
-            stop = False
-            for line in reader:
-                if line[0] == t1 and not start:
-                    start = True
-                elif line[0] == t2 and start:
-                    stop = True
-                elif not start:
-                    continue
-
-                if len(line) < 10 or stop:
-                    f.close()
-                    break
-                elif start:
-                    torque_data.append(line[:2] + line[first_col:first_col + len(axises)])
-        else:
-            for line in reader:
-                if len(line) < 10:
-                    f.close()
-                    break
-                else:
-                    torque_data.append(line[:2] + line[first_col:first_col + len(axises)])
+        for line in reader:
+            if len(line) < 10:
+                f.close()
+                break
+            else:
+                torque_data.append(line[:2] + line[first_col:first_col + len(axises)])
 
     torque_data = np.array(torque_data, dtype=np.float)
     t = (torque_data[:, 0] / frame_freq)
@@ -232,7 +217,7 @@ def get_torque_from_csv(file, torque_id, axises, frame_freq, t1, t2):
     return np.concatenate((t.reshape(t.shape[0], 1), torque_data[:, 2:]), axis=1)
 
 
-def get_emg_from_csv(file, emg_device, num_emg, frame_freq, analog_freq, t1=None, t2=None):
+def get_emg_from_csv(file, emg_device, num_emg, frame_freq, analog_freq):
     if not os.path.exists(file):
         raise Exception('The file ' + file + ' could not be found!')
 
@@ -259,29 +244,12 @@ def get_emg_from_csv(file, emg_device, num_emg, frame_freq, analog_freq, t1=None
         next(reader)
         next(reader)
 
-        if t1 and t2:
-            start = False
-            stop = False
-            for line in reader:
-                if line[0] == t1 and not start:
-                    start = True
-                elif line[0] == t2 and start:
-                    stop = True
-                elif not start:
-                    continue
-
-                if len(line) < num_emg + 1 or stop:
-                    f.close()
-                    break
-                elif start:
-                    emg_data.append(line[:2] + line[emg_first_col:emg_first_col + num_emg])
-        else:
-            for line in reader:
-                if len(line) < num_emg + 1:
-                    f.close()
-                    break
-                else:
-                    emg_data.append(line[:2] + line[emg_first_col:emg_first_col + num_emg])
+        for line in reader:
+            if len(line) < num_emg + 1:
+                f.close()
+                break
+            else:
+                emg_data.append(line[:2] + line[emg_first_col:emg_first_col + num_emg])
 
     emg_data = np.array(emg_data, dtype=np.float)
     t = (emg_data[:, 0] + (emg_data[:, 1] / (analog_freq / frame_freq))) / frame_freq
@@ -289,13 +257,14 @@ def get_emg_from_csv(file, emg_device, num_emg, frame_freq, analog_freq, t1=None
     return np.concatenate((t.reshape(t.shape[0], 1), emg_data[:, 2:]), axis=1)
 
 
-def get_fp_time_frame(file, fp_slack=10**-6):
+def get_fp_time_frame(file, frame_freq, fp_slack=10**-6):
     """Checks the activity of the force plates and returns the time frame (start frame and end frame) where they are
     active
 
     :param file: the full path to the csv file
+    :param frame_freq: the frame rate of the cameras during the trial
     :param fp_slack: sets the force plate activity threshold value (default 10^-6)
-    :return: the strings t1, t2 which are respectively the start frame and the stop frame of force plate activity
+    :return: the strings t1, t2 which are respectively the start and stop time of force plate activity
     """
     if not os.path.exists(file):
         raise Exception('The file ' + file + ' could not be found!')
@@ -333,11 +302,12 @@ def get_fp_time_frame(file, fp_slack=10**-6):
                 break
             elif not start and np.any(fp_val > np.ones(fp_val.shape)*fp_slack):
                 start = True
-                t1 = line[0]
+                t1 = float(line[0]) / frame_freq
             elif start:
                 if np.all(fp_val < np.ones(fp_val.shape)*fp_slack) and buffer > 100:
                     stop = True
-                    t2 = str(int(line[0]) + (int(line[1]) > 0))
+                    t2 = float(int(line[0]) + (int(line[1]) > 0)) / frame_freq
                 else:
                     buffer = buffer + 1
+
     return t1, t2
