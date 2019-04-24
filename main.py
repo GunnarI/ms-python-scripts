@@ -1,31 +1,28 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 import data_manager as dm
-#import matplotlib as mpl
-import matplotlib.pyplot as plt
 import filters as filt
 
 # Load data
 my_dm = dm.DataManager(r'C:\Users\Gunnar\Google Drive\MSThesis\Data')
-#my_dm.update_data_structure()
-my_dm.load_emg('Subject01','20190405', reload=False)
-#my_dm = dm.load_all_emg(my_dm)
+# my_dm.update_data_structure() # Uncomment if the data_structure.json needs updating
+my_dm.load_emg_and_torque('Subject01', '20190405', reload=True, load_filt=True)
 
 # Setup parameters
-low_pass = 30               # The lowpass cutoff frequency for EMG
-high_pass = 200             # The highpass cutoff frequency for EMG
-smoothing_window_ms = 100   # The window for moving average in milliseconds
+emg_lowcut = 30             # The lowpass cutoff frequency for EMG
+emg_highcut = 200           # The highpass cutoff frequency for EMG
+torque_lowcut = 100         # The lowpass cutoff frequency for the torque
+torque_filt_order = 5       # The order of the butterworth lowpass filter
+smoothing_window_ms = 20    # The window for moving average in milliseconds
 fs = 1000                   # Sampling frequency for analog data
+fs_mean_window = 10         # This value is used to "decrease the sampling frequency" of the emg by taking the mean,
+#                           # i.e. new sampling frequency = fs/fs_mean_window
 
-emg_filt_data_dict = filt.filter_emg(my_dm.emg_data_dict, low_pass, high_pass, smoothing_window_ms, fs)
+filt.filter_emg(my_dm.emg_data_dict, emg_lowcut, emg_highcut, smoothing_window_ms, fs, cut_time=True,
+                fs_mean_window=fs_mean_window)
+filt.filter_torque(my_dm.torque_data_dict, torque_filt_order, torque_lowcut, fs, axis_of_focus=0, cut_time=True,
+                   lp_filter=False)
+my_dm.update_filt_data_dict(reload=True)
 
-for key in emg_filt_data_dict:
-    t = emg_filt_data_dict[key][:, 0]
-    i = 0
-    plt.figure()
-    for column in emg_filt_data_dict[key][:, 1:].T:
-        i = i + 1
-        plt.plot(t, column, label='EMG %s' % i)
-
-    plt.legend()
-    plt.savefig('./figures/' + key)
+# TODO: Ooooog þjálfa

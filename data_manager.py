@@ -4,6 +4,7 @@ import csv
 import json
 from pathlib import Path
 import numpy as np
+import pandas as pd
 
 
 class DataManager:
@@ -11,6 +12,7 @@ class DataManager:
         self.base_dir = base_dir
         self.emg_data_dict = {}
         self.torque_data_dict = {}
+        self.filt_data_dict = {}
 
         with open('./data_structure.json', 'r') as ds:
             self.data_struct = json.load(ds)
@@ -31,7 +33,7 @@ class DataManager:
         with open('./data_structure.json', 'w') as ds:
             json.dump(self.data_struct, ds, indent=4)
 
-    def load_emg_and_torque(self, subject_id, trial_id, reload=False):
+    def load_emg_and_torque(self, subject_id, trial_id, reload=False, load_filt=False):
         """Loads the raw emg data either from the original csv file or previously saved txt file.
         If txt file does not already exist then a new one is saved. All emg data (both from csv and txt files) is added
         to the DataManager.emg_data_dict dictionary, each exercise with the key "<TrialID> <SubjectID> <ExerciseID>".
@@ -39,6 +41,7 @@ class DataManager:
         :param subject_id: the subject id from the data structure (e.g. "Subject01")
         :param trial_id: the trial id from the data structure (e.g. "20190405")
         :param reload: if True then the already saved txt files are overridden with values from the csv
+        :param load_filt: if True then the already saved txt files with filtered data is loaded as Pandas.DataFrame
         :return: nothing, only updates the class variables DataManager.emg_data_dict and DataManager.torque_data_dict
         """
         for subject in self.data_struct:
@@ -49,6 +52,10 @@ class DataManager:
                         num_emg = trial["NumEMG"]
                         frame_freq = trial["FramesPerSec"]
                         analog_freq = trial["AnalogFreq"]
+                        emg_headers = ['Time']
+                        # emg_headers.append('Time')
+                        for key in trial["EMGProtocol"]:
+                            emg_headers.append(trial["EMGProtocol"][key])
 
                         for exercise in trial["Exercises"]:
                             trial_exercise_id = trial_id + ' ' + subject_id + ' ' + exercise["ExerciseID"]
@@ -59,12 +66,14 @@ class DataManager:
 
                                 # Load emg data
                                 if os.path.isfile(emg_array_dir) and not reload:
-                                    self.emg_data_dict[trial_exercise_id] = {"data": np.loadtxt(emg_array_dir),
+                                    self.emg_data_dict[trial_exercise_id] = {"headers": emg_headers,
+                                                                             "data": np.loadtxt(emg_array_dir),
                                                                              "t1": t1, "t2": t2}
                                 else:
                                     emg_data = get_emg_from_csv(exercise["File"], emg_device, num_emg, frame_freq,
                                                                 analog_freq)
-                                    self.emg_data_dict[trial_exercise_id] = {"data": emg_data, "t1": t1, "t2": t2}
+                                    self.emg_data_dict[trial_exercise_id] = {"headers": emg_headers,
+                                                                             "data": emg_data, "t1": t1, "t2": t2}
                                     np.savetxt(emg_array_dir, emg_data, fmt='%f')
 
                                 # Load torque data
@@ -75,18 +84,53 @@ class DataManager:
                                 else:
                                     torque_data = get_torque_from_csv(exercise["File"],
                                                                       subject_id + ':RKneeMoment',
-                                                                      ['X', 'Y', 'Z'],
                                                                       frame_freq)
                                     self.torque_data_dict[trial_exercise_id] = {"data": torque_data, "t1": t1, "t2": t2}
                                     np.savetxt(torque_array_dir, torque_data, fmt='%f')
+
+                                # Load filtered data
+                                filt_emg_array_dir = './data/' + trial_exercise_id + ' filtered.txt'
+                                filt_torque_array_dir = './data/labels/' + trial_exercise_id + ' filtered.txt'
+                                if load_filt and os.path.isfile(filt_emg_array_dir) \
+                                        and os.path.isfile(filt_torque_array_dir):
+                                    pd_emg = pd.read_csv(filt_emg_array_dir, sep=' ').set_index('Time')
+                                    pd_torque = pd.read_csv(filt_torque_array_dir, sep=' ').set_index('Time')
+                                    self.filt_data_dict[trial_exercise_id + ' filtered'] = pd_emg.join(
+                                        pd_torque, how='outer').reset_index()
                             else:
                                 if os.path.isfile(emg_array_dir) and not reload:
-                                    self.emg_data_dict[trial_exercise_id] = {"data": np.loadtxt(emg_array_dir)}
+                                    self.emg_data_dict[trial_exercise_id] = {"headers": emg_headers,
+                                                                             "data": np.loadtxt(emg_array_dir)}
                                 else:
                                     emg_data = get_emg_from_csv(exercise["File"],
                                                                 emg_device, num_emg, frame_freq, analog_freq)
-                                    self.emg_data_dict[trial_exercise_id] = {"data": emg_data}
+                                    self.emg_data_dict[trial_exercise_id] = {"headers": emg_headers, "data": emg_data}
                                     np.savetxt(emg_array_dir, emg_data, fmt='%f')
+
+    def update_filt_data_dict(self, reload=False):
+        for key in self.torque_data_dict:
+            ids = key.split()
+            if key + ' filtered' in self.filt_data_dict and not reload:
+                continue
+            else:
+                filt_emg_array_dir = './data/' + key + ' filtered.txt'
+                filt_torque_array_dir = './data/labels/' + key + ' filtered.txt'
+                if os.path.isfile(filt_emg_array_dir) and os.path.isfile(filt_torque_array_dir):
+                    pd_emg = pd.read_csv(filt_emg_array_dir, sep=' ').set_index('Time')
+                    pd_torque = pd.read_csv(filt_torque_array_dir, sep=' ').set_index('Time')
+                    self.filt_data_dict[key + ' filtered'] = pd_emg.join(
+                        pd_torque, how='outer').reset_index()
+
+            if ids[0] + ' ' + ids[1] + ' concat filtered' not in self.filt_data_dict:
+                df_to_add = self.filt_data_dict[key + ' filtered'].copy()
+                df_to_add['Exercise'] = ids[2]
+                self.filt_data_dict[ids[0] + ' ' + ids[1] + ' concat filtered'] = df_to_add
+            elif not self.filt_data_dict[ids[0] + ' ' + ids[1] + ' concat filtered']['Exercise']\
+                    .str.contains(ids[2]).any():
+                df_to_add = self.filt_data_dict[key + ' filtered'].copy()
+                df_to_add['Exercise'] = ids[2]
+                self.filt_data_dict[ids[0] + ' ' + ids[1] + ' concat filtered'] = pd.concat(
+                    [self.filt_data_dict[ids[0] + ' ' + ids[1] + ' concat filtered'], df_to_add], ignore_index=True)
 
 
 # Creates the new subject dictionary including all trials and experiments
@@ -180,7 +224,7 @@ def get_subject_structure(data_structure, subject_id):
             return subject
 
 
-def get_torque_from_csv(file, torque_id, axises, frame_freq):
+def get_torque_from_csv(file, torque_id, frame_freq):
     if not os.path.exists(file):
         raise Exception('The file ' + file + ' could not be found!')
 
@@ -209,7 +253,7 @@ def get_torque_from_csv(file, torque_id, axises, frame_freq):
                 f.close()
                 break
             else:
-                torque_data.append(line[:2] + line[first_col:first_col + len(axises)])
+                torque_data.append(line[:2] + line[first_col:first_col + 3])
 
     torque_data = np.array(torque_data, dtype=np.float)
     t = (torque_data[:, 0] / frame_freq)
