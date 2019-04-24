@@ -1,19 +1,15 @@
 import numpy as np
-from scipy.signal import butter, lfilter
+from scipy.signal import butter, lfilter, lfilter_zi
 
 
 def butter_bandpass(lowcut, highcut, fs, order=5):
-    nyq = 0.5 * fs
-    low = lowcut / nyq
-    high = highcut / nyq
-    b, a = butter(order, [low, high], btype='band')
+    b, a = butter(order, [lowcut, highcut], btype='band', fs=fs)
     return b, a
 
 
-def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
-    b, a = butter_bandpass(lowcut, highcut, fs, order=order)
-    y = lfilter(b, a, data)
-    return y
+def butter_lowpass(data, lowcut, fs, order=4):
+    b, a = butter(order, lowcut, btype='lowpass', fs=fs)
+    return lfilter(b, a, data)
 
 
 def fourier_trans(data):
@@ -49,7 +45,7 @@ def save_np_dict_to_txt(dict_to_save, base_dir, data_fmt, headers=None):
     for key in dict_to_save:
         if headers:
             np.savetxt(base_dir + key + '.txt', dict_to_save[key], fmt=data_fmt,
-                       header=' '.join(emg_id for emg_id in headers[key]))
+                       header=' '.join(emg_id for emg_id in headers[key]), comments='')
         else:
             np.savetxt(base_dir + key + '.txt', dict_to_save[key], fmt=data_fmt)
 
@@ -63,9 +59,37 @@ def normalize_emg(emg_data_dict, max_emg_dict):
             max_emg_dict[ids[0] + ' ' + ids[1] + ' MaxEMG'])
     return emg_data_dict
 
+# TODO: implement real-time filtering (if time)
+# def filter_emg_rt(channels, low_pass, high_pass, window)
 
-def filter_emg(emg_data_dict, low_pass, high_pass, window, fs, cut_time=False):
+
+def filter_torque(torque_data_dict, filt_order, lowcut, fs, axis_of_focus=0, cut_time=False, lp_filter=False):
+    torque_filt_data_dict = {}
+    headers = {}
+    b, a = butter(filt_order, lowcut, btype='lowpass', fs=fs)
+    for key in torque_data_dict:
+        filtered_torque = np.zeros(shape=(len(torque_data_dict[key]["data"][:, 0]), 2))
+        filtered_torque[:, 0] = torque_data_dict[key]["data"][:, 0]
+        if lp_filter:
+            filtered_torque[:, 1] = lfilter(b, a, torque_data_dict[key]["data"][:, axis_of_focus + 1])
+        else:
+            filtered_torque[:, 1] = torque_data_dict[key]["data"][:, axis_of_focus + 1]
+
+        if cut_time and 'walk' in key.lower():
+            t1 = torque_data_dict[key]["t1"]
+            t2 = torque_data_dict[key]["t2"]
+            filtered_torque = filtered_torque[(filtered_torque[:, 0] >= t1) & (filtered_torque[:, 0] <= t2), :]
+
+        torque_filt_data_dict[key + ' filtered'] = filtered_torque
+        headers[key + ' filtered'] = ['Time', 'Torque']
+
+    # Save the filtered torque signals
+    save_np_dict_to_txt(torque_filt_data_dict, './data/labels/', data_fmt='%f', headers=headers)
+
+
+def filter_emg(emg_data_dict, lowcut, highcut, window, fs, cut_time=False, fs_mean_window=0):
     emg_filt_data_dict = {}
+    emg_headers = {}
     max_emg_values_dict = {}
     max_emg_exercises_dict = {}
     for key in emg_data_dict:
@@ -73,18 +97,23 @@ def filter_emg(emg_data_dict, low_pass, high_pass, window, fs, cut_time=False):
         num_emg = len(emg_data_dict[key]["data"][0, :]) - 1
         t = emg_data_dict[key]["data"][:, 0]
         t_short = t_vec_after_ma(window, t)
+        if fs_mean_window > 0:
+            t_short = t_short[fs_mean_window::fs_mean_window]
         filtered_emg = np.zeros(shape=(len(t_short), num_emg + 1))
-        i = 0
-        filtered_emg[:, i] = t_short
-        for column in emg_data_dict[key]["data"][:, 1:].T:
-            column = noise_filter(column, low_pass, high_pass, fs)
+        filtered_emg[:, 0] = t_short
+        for i, column in enumerate(emg_data_dict[key]["data"][:, 1:].T):
+            column = noise_filter(column, lowcut, highcut, fs)
             column = demodulation(column)
             column, t = smoothing(column, t, window, fs)
             column = relinearization(column)
-            i = i + 1
-            filtered_emg[:, i] = column
+            if fs_mean_window > 0:
+                tail = - (column.size % fs_mean_window) if column.size % fs_mean_window > 0 else column.size
+                column = column[:tail].reshape(-1, fs_mean_window).mean(axis=-1)
+            filtered_emg[:, i + 1] = column
 
         emg_filt_data_dict[key + ' filtered'] = filtered_emg
+
+        emg_headers[key + ' filtered'] = emg_data_dict[key]["headers"]
 
         max_emg_key = ids[0] + ' ' + ids[1] + ' MaxEMG'
 
@@ -112,15 +141,35 @@ def filter_emg(emg_data_dict, low_pass, high_pass, window, fs, cut_time=False):
     emg_filt_data_dict = normalize_emg(emg_filt_data_dict, max_emg_values_dict)
 
     # Save the filtered and normalized emg signals
-    save_np_dict_to_txt(emg_filt_data_dict, './data/', data_fmt='%f')
-
-    return emg_filt_data_dict
+    save_np_dict_to_txt(emg_filt_data_dict, './data/', data_fmt='%f', headers=emg_headers)
 
 
 def noise_filter(data, lowcut, highcut, fs, order=5):
     b, a = butter_bandpass(lowcut, highcut, fs, order=order)
-    y = lfilter(b, a, data)
+    y = lfilter(b, a, data)     # lfilter is a causal forward-in-time filtering and can't be zero-phase
     return y
+
+
+def rt_noise_filter(data, lowcut, highcut, fs, zi=None, order=5):
+    """Example of use:
+        result = zeros(data.size)
+        zi = None
+        for i, x in enumerate(data):
+            result[i], zi = rt_noise_filter(x, 30, 200, 1000, zi)
+
+    :param data:
+    :param lowcut:
+    :param highcut:
+    :param fs:
+    :param zi:
+    :param order:
+    :return:
+    """
+    b, a = butter_bandpass(lowcut, highcut, fs, order=order)
+    if zi is None:
+        zi = lfilter_zi(b, a)
+    y, zo = lfilter(b, a, [data], zi=zi)
+    return y, zo
 
 # def whitening
 
