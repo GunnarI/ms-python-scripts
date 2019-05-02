@@ -283,8 +283,8 @@ def get_emg_from_csv(file, emg_device, num_emg, frame_freq, analog_freq):
 
         devices = next(reader)
         emg_first_col = devices.index(emg_device)
-        # headers = next(reader)
-        # headers = ['Time'] + headers[emg_first_col:emg_first_col+num_emg]
+        headers = next(reader)
+        headers = headers[emg_first_col:emg_first_col+num_emg]
         next(reader)
         next(reader)
 
