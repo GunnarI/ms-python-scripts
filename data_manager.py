@@ -13,6 +13,7 @@ class DataManager:
         self.emg_data_dict = {}
         self.torque_data_dict = {}
         self.filt_data_dict = {}
+        self.cycles_data_dict = {}
 
         with open('./data_structure.json', 'r') as ds:
             self.data_struct = json.load(ds)
@@ -62,30 +63,35 @@ class DataManager:
                             emg_array_dir = './data/' + trial_exercise_id + '.txt'
 
                             if 'walk' in exercise["ExerciseID"].lower():
-                                t1, t2 = get_fp_time_frame(exercise["File"], frame_freq)
+                                t1, t2, gait_cycles = get_fp_time_frame_and_gait_cycles(exercise["File"], frame_freq,
+                                                                                        fp_slack=5)
 
                                 # Load emg data
                                 if os.path.isfile(emg_array_dir) and not reload:
                                     self.emg_data_dict[trial_exercise_id] = {"headers": emg_headers,
                                                                              "data": np.loadtxt(emg_array_dir),
-                                                                             "t1": t1, "t2": t2}
+                                                                             "t1": t1, "t2": t2,
+                                                                             "gait_cycles": gait_cycles}
                                 else:
                                     emg_data = get_emg_from_csv(exercise["File"], emg_device, num_emg, frame_freq,
                                                                 analog_freq)
                                     self.emg_data_dict[trial_exercise_id] = {"headers": emg_headers,
-                                                                             "data": emg_data, "t1": t1, "t2": t2}
+                                                                             "data": emg_data, "t1": t1, "t2": t2,
+                                                                             "gait_cycles": gait_cycles}
                                     np.savetxt(emg_array_dir, emg_data, fmt='%f')
 
                                 # Load torque data
                                 torque_array_dir = './data/labels/' + trial_exercise_id + '.txt'
                                 if os.path.isfile(torque_array_dir) and not reload:
                                     self.torque_data_dict[trial_exercise_id] = {"data": np.loadtxt(torque_array_dir),
-                                                                                "t1": t1, "t2": t2}
+                                                                                "t1": t1, "t2": t2,
+                                                                                "gait_cycles": gait_cycles}
                                 else:
                                     torque_data = get_torque_from_csv(exercise["File"],
                                                                       subject_id + ':RKneeMoment',
                                                                       frame_freq)
-                                    self.torque_data_dict[trial_exercise_id] = {"data": torque_data, "t1": t1, "t2": t2}
+                                    self.torque_data_dict[trial_exercise_id] = {"data": torque_data, "t1": t1, "t2": t2,
+                                                                                "gait_cycles": gait_cycles}
                                     np.savetxt(torque_array_dir, torque_data, fmt='%f')
 
                                 # Load filtered data
@@ -131,6 +137,27 @@ class DataManager:
                 df_to_add['Exercise'] = ids[2]
                 self.filt_data_dict[ids[0] + ' ' + ids[1] + ' concat filtered'] = pd.concat(
                     [self.filt_data_dict[ids[0] + ' ' + ids[1] + ' concat filtered'], df_to_add], ignore_index=True)
+
+    def set_cycles_data_dict(self, read_filt_from_dict=True):
+        for key in self.torque_data_dict:
+            if read_filt_from_dict:
+                gait_cycle_dict = self.torque_data_dict[key]['gait_cycles']
+                for cycle in gait_cycle_dict:
+                    self.cycles_data_dict[key + ' ' + cycle] = \
+                        self.filt_data_dict[key + ' filtered'].set_index('Time').truncate(
+                        gait_cycle_dict[cycle]['Start'], gait_cycle_dict[cycle]['End']).reset_index()
+            else:
+                filt_emg_array_dir = './data/' + key + ' filtered.txt'
+                filt_torque_array_dir = './data/labels/' + key + ' filtered.txt'
+                if os.path.isfile(filt_emg_array_dir) and os.path.isfile(filt_torque_array_dir):
+                    gait_cycle_dict = self.torque_data_dict[key]['gait_cycles']
+                    for cycle in gait_cycle_dict:
+                        pd_emg = pd.read_csv(filt_emg_array_dir, sep=' ').set_index('Time').truncate(
+                            gait_cycle_dict[cycle]['Start'], gait_cycle_dict[cycle]['End'])
+                        pd_torque = pd.read_csv(filt_torque_array_dir, sep=' ').set_index('Time').truncate(
+                            gait_cycle_dict[cycle]['Start'], gait_cycle_dict[cycle]['End'])
+                        self.cycles_data_dict[key + ' ' + cycle] = pd_emg.join(
+                            pd_torque, how='outer').reset_index()
 
 
 # Creates the new subject dictionary including all trials and experiments
@@ -289,7 +316,7 @@ def get_emg_from_csv(file, emg_device, num_emg, frame_freq, analog_freq):
         next(reader)
 
         for line in reader:
-            if len(line) < num_emg + 1:
+            if len(line) < num_emg + 1 or '' in line[emg_first_col:emg_first_col + num_emg]:
                 f.close()
                 break
             else:
@@ -301,7 +328,7 @@ def get_emg_from_csv(file, emg_device, num_emg, frame_freq, analog_freq):
     return np.concatenate((t.reshape(t.shape[0], 1), emg_data[:, 2:]), axis=1)
 
 
-def get_fp_time_frame(file, frame_freq, fp_slack=10**-6):
+def get_fp_time_frame_and_gait_cycles(file, frame_freq, fp_slack=10**-6):
     """Checks the activity of the force plates and returns the time frame (start frame and end frame) where they are
     active
 
@@ -322,13 +349,58 @@ def get_fp_time_frame(file, frame_freq, fp_slack=10**-6):
     t1 = 0.0
     t2 = 0.0
     with f:
-        fl = f.readline()
-        while 'Devices' not in fl:
-            fl = f.readline()
-
-        f.__next__()
+        # fl = f.readline()
+        # while 'Devices' not in fl:
+        #     fl = f.readline()
+        #
+        # f.__next__()
 
         reader = csv.reader(f, delimiter=',')
+        row = next(reader)
+
+        # Find events
+        while 'Events' not in row:
+            row = next(reader)
+
+        next(reader)
+        event_col_headers = next(reader)
+        event_context_col = event_col_headers.index('Context')
+        event_name_col = event_col_headers.index('Name')
+        event_time_col = event_col_headers.index('Time (s)')
+
+        right_fp_time = []
+        row = next(reader)
+        while 'General' == row[event_context_col]:
+            if 'Right-FP' == row[event_name_col]:
+                right_fp_time.append(row[event_time_col])
+            row = next(reader)
+
+        while 'Right' != row[event_context_col]:
+            row = next(reader)
+
+        gait_cycles_name = []
+        gait_cycles_time = []
+        while 'Right' in row:
+            gait_cycles_name.append(row[event_name_col])
+            gait_cycles_time.append(row[event_time_col])
+            row = next(reader)
+
+        # Define cycle(s) into dictionary
+        right_fp_time = np.array(right_fp_time, dtype=np.float)
+        gait_cycles_time = np.array(gait_cycles_time, dtype=np.float)
+        gait_cycle_dict = {}
+        i = 0
+        for time in right_fp_time:
+            gait_cycle_dict['Cycle' + str(i + 1)] = {'Start': np.max(
+                gait_cycles_time[np.where(gait_cycles_time < right_fp_time[i])]),
+                'End': gait_cycles_time[np.where(gait_cycles_time > right_fp_time[i])][1]
+            }
+            i = i + 1
+
+        # Find devices
+        while 'Devices' not in row:
+            row = next(reader)
+        next(reader)
 
         devices = next(reader)
         fp_col = [i for i, s in enumerate(devices) if ' - Force' in s]
@@ -354,4 +426,4 @@ def get_fp_time_frame(file, frame_freq, fp_slack=10**-6):
                 else:
                     buffer = buffer + 1
 
-    return t1, t2
+    return t1, t2, gait_cycle_dict
