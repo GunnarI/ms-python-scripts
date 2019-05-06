@@ -64,15 +64,29 @@ def normalize_emg(emg_data_dict, max_emg_dict):
 
 def min_max_normalize_data(df, norm_emg=True, norm_torque=False):
     return_df = df.copy()
-    torque = return_df.pop('Torque')
+    col = list(df)
+    if 'Torque' in col:
+        torque = return_df.pop('Torque')
+    if 'Time' in col:
+        time = return_df.pop('Time')
+    if 'Exercise' in col:
+        exercise = return_df.pop('Exercise')
+
     emg = return_df.values
     # for i in range(x[:,1:1+num_features], 1):
     if norm_emg:
         return_df = pd.DataFrame(preprocessing.MinMaxScaler().fit_transform(emg),
-                                 columns=return_df.columns)
+                                 columns=return_df.columns, index=return_df.index)
     if norm_torque:
         torque = preprocessing.MinMaxScaler(feature_range=(-1, 1))
-    return_df['Torque'] = torque
+
+    if 'Torque' in col:
+        return_df['Torque'] = torque
+    if 'Time' in col:
+        return_df['Time'] = time
+    if 'Exercise' in col:
+        return_df['Exercise'] = exercise
+
     return return_df
 
 # TODO: implement real-time filtering (if time)
