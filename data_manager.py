@@ -61,7 +61,11 @@ class DataManager:
                             emg_array_dir = './data/' + trial_exercise_id + '.txt'
 
                             if 'walk' in exercise["ExerciseID"].lower():
-                                t1, t2, gait_cycles = get_gait_cycles(exercise["File"])
+                                try:
+                                    t1, t2, gait_cycles = get_gait_cycles(exercise["File"])
+                                except AssertionError as error:
+                                    print(error)
+                                    continue
 
                                 # Load emg data
                                 if os.path.isfile(emg_array_dir) and not reload:
@@ -96,10 +100,32 @@ class DataManager:
                                     filt_emg_array_dir = './data/' + trial_exercise_id + ' filtered.txt'
                                     filt_torque_array_dir = './data/labels/' + trial_exercise_id + ' filtered.txt'
                                     if os.path.isfile(filt_emg_array_dir) and os.path.isfile(filt_torque_array_dir):
-                                        pd_emg = pd.read_csv(filt_emg_array_dir, sep=' ').set_index('Time')
-                                        pd_torque = pd.read_csv(filt_torque_array_dir, sep=' ').set_index('Time')
-                                        self.filt_data_dict[trial_exercise_id + ' filtered'] = pd_emg.join(
-                                            pd_torque, how='outer').reset_index()
+                                        for cycle in gait_cycles:
+                                            pd_emg = pd.read_csv(filt_emg_array_dir, sep=' ').set_index(
+                                                'Time').truncate(
+                                                gait_cycles[cycle]['Start'], gait_cycles[cycle]['End'])
+                                            pd_torque = pd.read_csv(filt_torque_array_dir, sep=' ').set_index(
+                                                'Time').truncate(
+                                                gait_cycles[cycle]['Start'], gait_cycles[cycle]['End'])
+                                            self.filt_data_dict[trial_exercise_id + ' ' + cycle] = pd_emg.join(
+                                                pd_torque, how='outer').reset_index()
+
+                                            df_to_add = self.filt_data_dict[trial_exercise_id + ' ' + cycle].copy()
+                                            df_to_add['Time'] = (
+                                                    df_to_add['Time'] - gait_cycles[cycle]['Start']).round(decimals=2)
+                                            df_to_add['Exercise'] = exercise['ExerciseID'] + cycle
+
+                                            if trial_id + ' ' + subject_id + ' concat filtered' \
+                                                    not in self.filt_data_dict:
+                                                self.filt_data_dict[
+                                                    trial_id + ' ' + subject_id + ' concat filtered'] = df_to_add
+                                            elif not self.filt_data_dict[
+                                                trial_id + ' ' + subject_id + ' concat filtered'
+                                            ]['Exercise'].str.contains(exercise['ExerciseID'] + cycle).any():
+                                                self.filt_data_dict[
+                                                    trial_id + ' ' + subject_id + ' concat filtered'] = pd.concat(
+                                                    [self.filt_data_dict[trial_id + ' ' + subject_id +
+                                                                         ' concat filtered'], df_to_add])
                             else:
                                 if os.path.isfile(emg_array_dir) and not reload:
                                     self.emg_data_dict[trial_exercise_id] = {"headers": emg_headers,
@@ -344,6 +370,8 @@ def get_gait_cycles(file):
                 right_fp_time.append(row[event_time_col])
             row = next(reader)
 
+        assert (len(right_fp_time) > 0), 'No right foot heal strike detected in file: ' + file
+
         while 'Right' != row[event_context_col]:
             row = next(reader)
 
@@ -359,9 +387,9 @@ def get_gait_cycles(file):
         gait_cycles_time = np.array(gait_cycles_time, dtype=np.float)
         gait_cycle_dict = {}
         for i in range(len(right_fp_time)):
-            gait_cycle_dict['Cycle' + str(i + 1)] = {'Start': np.max(
-                gait_cycles_time[np.where(gait_cycles_time < right_fp_time[i])]),
-                'End': gait_cycles_time[np.where(gait_cycles_time > right_fp_time[i])][1]
+            gait_cycle_dict['Cycle' + str(i + 1)] = {
+                'Start': np.around(np.max(gait_cycles_time[np.where(gait_cycles_time < right_fp_time[i])]), decimals=2),
+                'End': np.around(gait_cycles_time[np.where(gait_cycles_time > right_fp_time[i])][1], decimals=2)
             }
 
         t1 = gait_cycle_dict['Cycle1']['Start']
