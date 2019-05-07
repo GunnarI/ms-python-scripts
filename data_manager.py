@@ -13,6 +13,7 @@ class DataManager:
         self.emg_data_dict = {}
         self.torque_data_dict = {}
         self.filt_data_dict = {}
+        self.filt_concat_data_dict = {}
 
         with open('./data_structure.json', 'r') as ds:
             self.data_struct = json.load(ds)
@@ -107,25 +108,26 @@ class DataManager:
                                             pd_torque = pd.read_csv(filt_torque_array_dir, sep=' ').set_index(
                                                 'Time').truncate(
                                                 gait_cycles[cycle]['Start'], gait_cycles[cycle]['End'])
-                                            self.filt_data_dict[trial_exercise_id + ' ' + cycle] = pd_emg.join(
+                                            self.filt_data_dict[trial_exercise_id + cycle] = pd_emg.join(
                                                 pd_torque, how='outer').reset_index()
 
-                                            df_to_add = self.filt_data_dict[trial_exercise_id + ' ' + cycle].copy()
+                                            df_to_add = self.filt_data_dict[trial_exercise_id + cycle].copy()
                                             df_to_add['Time'] = (
                                                     df_to_add['Time'] - gait_cycles[cycle]['Start']).round(decimals=2)
                                             df_to_add['Exercise'] = exercise['ExerciseID'] + cycle
 
-                                            if trial_id + ' ' + subject_id + ' concat filtered' \
-                                                    not in self.filt_data_dict:
-                                                self.filt_data_dict[
-                                                    trial_id + ' ' + subject_id + ' concat filtered'] = df_to_add
-                                            elif not self.filt_data_dict[
-                                                trial_id + ' ' + subject_id + ' concat filtered'
+                                            if trial_id + ' ' + subject_id + ' filtered' \
+                                                    not in self.filt_concat_data_dict:
+                                                self.filt_concat_data_dict[
+                                                    trial_id + ' ' + subject_id + ' filtered'] = df_to_add
+                                            elif not self.filt_concat_data_dict[
+                                                trial_id + ' ' + subject_id + ' filtered'
                                             ]['Exercise'].str.contains(exercise['ExerciseID'] + cycle).any():
-                                                self.filt_data_dict[
-                                                    trial_id + ' ' + subject_id + ' concat filtered'] = pd.concat(
-                                                    [self.filt_data_dict[trial_id + ' ' + subject_id +
-                                                                         ' concat filtered'], df_to_add])
+                                                self.filt_concat_data_dict[
+                                                    trial_id + ' ' + subject_id + ' filtered'] = pd.concat(
+                                                    [self.filt_concat_data_dict[trial_id + ' ' + subject_id +
+                                                                                ' filtered'], df_to_add],
+                                                    ignore_index=True)
                             else:
                                 if os.path.isfile(emg_array_dir) and not reload:
                                     self.emg_data_dict[trial_exercise_id] = {"headers": emg_headers,
@@ -150,20 +152,20 @@ class DataManager:
                         gait_cycle_dict[cycle]['Start'], gait_cycle_dict[cycle]['End'])
                     pd_torque = pd.read_csv(filt_torque_array_dir, sep=' ').set_index('Time').truncate(
                         gait_cycle_dict[cycle]['Start'], gait_cycle_dict[cycle]['End'])
-                    self.filt_data_dict[key + ' ' + cycle] = pd_emg.join(
+                    self.filt_data_dict[key + cycle] = pd_emg.join(
                         pd_torque, how='outer').reset_index()
 
             for cycle in gait_cycle_dict:
-                df_to_add = self.filt_data_dict[key + ' ' + cycle].copy()
+                df_to_add = self.filt_data_dict[key + cycle].copy()
                 df_to_add['Time'] = (df_to_add['Time'] - gait_cycle_dict[cycle]['Start']).round(decimals=2)
                 df_to_add['Exercise'] = ids[2] + cycle
 
-                if ids[0] + ' ' + ids[1] + ' concat filtered' not in self.filt_data_dict:
-                    self.filt_data_dict[ids[0] + ' ' + ids[1] + ' concat filtered'] = df_to_add
-                elif not self.filt_data_dict[ids[0] + ' ' + ids[1] + ' concat filtered']['Exercise'] \
+                if ids[0] + ' ' + ids[1] + ' filtered' not in self.filt_concat_data_dict:
+                    self.filt_concat_data_dict[ids[0] + ' ' + ids[1] + ' filtered'] = df_to_add
+                elif not self.filt_concat_data_dict[ids[0] + ' ' + ids[1] + ' filtered']['Exercise'] \
                         .str.contains(ids[2] + cycle).any():
-                    self.filt_data_dict[ids[0] + ' ' + ids[1] + ' concat filtered'] = pd.concat(
-                        [self.filt_data_dict[ids[0] + ' ' + ids[1] + ' concat filtered'], df_to_add])
+                    self.filt_concat_data_dict[ids[0] + ' ' + ids[1] + ' filtered'] = pd.concat(
+                        [self.filt_concat_data_dict[ids[0] + ' ' + ids[1] + ' filtered'], df_to_add], ignore_index=True)
 
 
 # Creates the new subject dictionary including all trials and experiments
@@ -364,11 +366,15 @@ def get_gait_cycles(file):
         event_time_col = event_col_headers.index('Time (s)')
 
         right_fp_time = []
+        time_value = 0
         row = next(reader)
         while 'General' == row[event_context_col]:
             if 'Right-FP' == row[event_name_col]:
-                right_fp_time.append(row[event_time_col])
+                time_value = row[event_time_col]
+                right_fp_time.append(time_value)
             row = next(reader)
+            while row[event_time_col] == time_value:
+                row = next(reader)
 
         assert (len(right_fp_time) > 0), 'No right foot heal strike detected in file: ' + file
 
