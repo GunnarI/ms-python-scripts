@@ -19,14 +19,11 @@ def get_min_med_max_cycles(df):
     return (min_cycle, min_cycle_len), (median_cycle, median_cycle_len), (max_cycle, max_cycle_len)
 
 
-def plot_moment_avg(df, plot_min_med_max=False, plot_time_boxplot=False):
+def plot_moment_avg(df, plot_min_med_max=False, save_fig_as=None):
     min_cycle, med_cycle, max_cycle = get_min_med_max_cycles(df)
-
-    plt.figure()
-    if plot_time_boxplot:
-        fig, (ax1, ax2) = plt.subplots(2, 1)
-    else:
-        ax1 = plt.subplot()
+    fig = plt.figure(figsize=(8, 5))
+    ax1 = plt.subplot()
+    fig.add_subplot(ax1)
 
     moment_avg = df.groupby('Time')['Torque'].mean()
     moment_std = df.groupby('Time')['Torque'].std()
@@ -42,10 +39,6 @@ def plot_moment_avg(df, plot_min_med_max=False, plot_time_boxplot=False):
     ax1.set_xlabel('gait cycle duration [s]')
     ax1.set_ylabel('joint moment [N.mm/kg]')
 
-    if plot_time_boxplot:
-        time_intervals = df.groupby('Exercise')['Time'].agg(np.ptp)
-        ax2.boxplot(time_intervals, vert=False)
-
     if plot_min_med_max:
         ax1.plot(df.loc[df['Exercise'] == min_cycle[0], 'Time'], df.loc[df['Exercise'] == min_cycle[0], 'Torque'],
                  label='Fastest cycle')
@@ -55,9 +48,14 @@ def plot_moment_avg(df, plot_min_med_max=False, plot_time_boxplot=False):
                  label='Median cycle')
     ax1.legend()
 
+    fig.add_subplot(ax1)
+    if not save_fig_as:
+        fig.show()
+    else:
+        fig.savefig('./figures/' + save_fig_as + '.png', bbox_inches='tight')
 
-def plot_muscle_average(df, muscle_list=None, plot_min_and_max=False,
-                        title='EMG Muscle Activity'):
+
+def plot_muscle_average(df, muscle_list=None, plot_min_and_max=False, title='EMG Muscle Activity', save_fig_as=None):
     min_cycle, med_cycle, max_cycle = get_min_med_max_cycles(df)
 
     if not muscle_list:
@@ -67,10 +65,10 @@ def plot_muscle_average(df, muscle_list=None, plot_min_and_max=False,
         muscle_list.remove('Exercise')
 
     num_plots = len(muscle_list)
-    fig, axs = plt.subplots(num_plots, 1, sharex=True)
-    fig.subplots_adjust(hspace=0.000)
+    fig, axs = plt.subplots(num_plots, 1, sharex=True, figsize=(7, 1.7 * num_plots), squeeze=False)
+    fig.subplots_adjust(hspace=0.04)
     fig.suptitle(title)
-    fig.text(0.04, 0.5, 'Normalized amplitdue [V/V]', va='center', rotation='vertical')
+    fig.text(0.06, 0.5, 'Normalized amplitdue [V/V]', ha='right', va='center', rotation='vertical')
     for i, muscle in enumerate(muscle_list):
         emg_avg = df.groupby('Time')[muscle].mean()
         emg_std = df.groupby('Time')[muscle].std()
@@ -78,22 +76,35 @@ def plot_muscle_average(df, muscle_list=None, plot_min_and_max=False,
 
         std_range = (emg_avg - emg_std, emg_avg + emg_std)
 
-        ax1 = plt.subplot(num_plots, 1, i + 1)
-        ax1.fill_between(time_vec, std_range[0], std_range[1], alpha=0.2)
-        ax1.plot(time_vec, emg_avg, label='Average')
-        ax1.set_xlabel('gait cycle duration [s]')
-        # ax1.set_ylabel('normalized amplitude [V/V]')
+        axs[i, 0] = plt.subplot(num_plots, 1, i + 1)
+        axs[i, 0].fill_between(time_vec, std_range[0], std_range[1], alpha=0.2)
+        axs[i, 0].plot(time_vec, emg_avg, label='Average')
+        axs[i, 0].set_xlabel('gait cycle duration [s]')
 
         if plot_min_and_max:
-            ax1.plot(df.loc[df['Exercise'] == min_cycle[0], 'Time'], df.loc[df['Exercise'] == min_cycle[0], muscle],
-                     label='Fastest cycle')
-            ax1.plot(df.loc[df['Exercise'] == max_cycle[0], 'Time'], df.loc[df['Exercise'] == max_cycle[0], muscle],
-                     label='Slowest cycle')
-            ax1.plot(df.loc[df['Exercise'] == med_cycle[0], 'Time'], df.loc[df['Exercise'] == med_cycle[0], muscle],
-                     label='Median cycle')
-            ax1.legend()
+            axs[i, 0].plot(df.loc[df['Exercise'] == min_cycle[0], 'Time'],
+                        df.loc[df['Exercise'] == min_cycle[0], muscle],
+                        label='Fastest cycle')
+            axs[i, 0].plot(df.loc[df['Exercise'] == max_cycle[0], 'Time'],
+                        df.loc[df['Exercise'] == max_cycle[0], muscle],
+                        label='Slowest cycle')
+            axs[i, 0].plot(df.loc[df['Exercise'] == med_cycle[0], 'Time'],
+                        df.loc[df['Exercise'] == med_cycle[0], muscle],
+                        label='Median cycle')
 
-    fig.show()
+        axs[i, 0].set_ylim(0, 0.99)
+        axs[i, 0].set_yticks(np.arange(0, 1, 0.2))
+        axs[i, 0].text(0.72, 0.95, muscle, size='large', ha='left', va='top', transform=axs[i, 0].transAxes)
+
+    if plot_min_and_max:
+        handles, labels = axs[0, 0].get_legend_handles_labels()
+        fig.legend(handles, labels, loc='upper right')
+        # fig.legend((l1, l2, l3, l4), loc='upper right')
+
+    if not save_fig_as:
+        fig.show()
+    else:
+        fig.savefig('./figures/' + save_fig_as + '.png', bbox_inches='tight')
 
 
 def plot_cycle_time_quartile(df):
