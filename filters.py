@@ -65,10 +65,10 @@ def normalize_emg(emg_data_dict, max_emg_dict):
 def min_max_normalize_data(df, norm_emg=True, norm_torque=False):
     return_df = df.copy()
     col = list(df)
-    if 'Torque' in col:
-        torque = return_df.pop('Torque')
     if 'Time' in col:
         time = return_df.pop('Time')
+    if 'Torque' in col:
+        torque = return_df.pop('Torque')
     if 'Exercise' in col:
         exercise = return_df.pop('Exercise')
 
@@ -80,10 +80,10 @@ def min_max_normalize_data(df, norm_emg=True, norm_torque=False):
     if norm_torque:
         torque = preprocessing.MinMaxScaler(feature_range=(-1, 1))
 
+    if 'Time' in col:
+        return_df.insert(0, 'Time', time)
     if 'Torque' in col:
         return_df['Torque'] = torque
-    if 'Time' in col:
-        return_df['Time'] = time
     if 'Exercise' in col:
         return_df['Exercise'] = exercise
 
