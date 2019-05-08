@@ -1,11 +1,13 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
+import numpy as np
 
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 
+import filters as filt
 
 def build_model(train_dataset):
     model = keras.Sequential([
@@ -20,6 +22,52 @@ def build_model(train_dataset):
                   optimizer=optimizer,
                   metrics=['mean_absolute_error', 'mean_squared_error'])
     return model
+
+
+def create_train_and_test(df, frac=0.8, randomize_by_exercise=True):
+    dataset = df.copy()
+    if randomize_by_exercise:
+        exercise_groups = dataset.groupby('Exercise')
+        group_num = np.arange(exercise_groups.ngroups)
+        np.random.shuffle(group_num)
+
+        train_dataset = dataset[
+            exercise_groups.ngroup().isin(group_num[:np.floor(frac * len(group_num) - 1).astype('int')])
+        ]
+    else:
+        train_dataset = dataset.sample(frac=frac, random_state=0)
+
+    test_dataset = dataset.drop(train_dataset.index)
+    return train_dataset, test_dataset
+
+
+def prepare_data(data_dict, subject_id=None):
+    # TODO: unfinished, needs to be evaluated and finished
+    for key in data_dict:
+        if subject_id is None:
+            dataset = data_dict[key].copy()
+            train_dataset, test_dataset = create_train_and_test(dataset, frac=0.8)
+            train_dataset.pop('Exercise')
+            train_dataset.pop('Time')
+            test_exercise = test_dataset.pop('Exercise')
+            test_times = test_dataset.pop('Time')
+
+            norm_train_data = filt.min_max_normalize_data(train_dataset, norm_emg=True, norm_torque=True)
+            norm_test_data = filt.min_max_normalize_data(test_dataset, secondary_df=train_dataset, norm_emg=True,
+                                                         norm_torque=True)
+        elif subject_id in key:
+            dataset = data_dict[key].copy()
+            train_dataset, test_dataset = create_train_and_test(dataset, frac=0.8)
+            train_dataset.pop('Exercise')
+            train_dataset.pop('Time')
+            test_exercise = test_dataset.pop('Exercise')
+            test_times = test_dataset.pop('Time')
+
+            norm_train_data = filt.min_max_normalize_data(train_dataset, norm_emg=True, norm_torque=True)
+            norm_test_data = filt.min_max_normalize_data(test_dataset, secondary_df=train_dataset, norm_emg=True,
+                                                         norm_torque=True)
+
+            break
 
 
 class PrintDot(keras.callbacks.Callback):
