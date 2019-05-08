@@ -83,14 +83,14 @@ def plot_muscle_average(df, muscle_list=None, plot_min_and_max=False, title='EMG
 
         if plot_min_and_max:
             axs[i, 0].plot(df.loc[df['Exercise'] == min_cycle[0], 'Time'],
-                        df.loc[df['Exercise'] == min_cycle[0], muscle],
-                        label='Fastest cycle')
+                           df.loc[df['Exercise'] == min_cycle[0], muscle],
+                           label='Fastest cycle')
             axs[i, 0].plot(df.loc[df['Exercise'] == max_cycle[0], 'Time'],
-                        df.loc[df['Exercise'] == max_cycle[0], muscle],
-                        label='Slowest cycle')
+                           df.loc[df['Exercise'] == max_cycle[0], muscle],
+                           label='Slowest cycle')
             axs[i, 0].plot(df.loc[df['Exercise'] == med_cycle[0], 'Time'],
-                        df.loc[df['Exercise'] == med_cycle[0], muscle],
-                        label='Median cycle')
+                           df.loc[df['Exercise'] == med_cycle[0], muscle],
+                           label='Median cycle')
 
         axs[i, 0].set_ylim(0, 0.99)
         axs[i, 0].set_yticks(np.arange(0, 1, 0.2))
@@ -107,10 +107,19 @@ def plot_muscle_average(df, muscle_list=None, plot_min_and_max=False, title='EMG
         fig.savefig('./figures/' + save_fig_as + '.png', bbox_inches='tight')
 
 
-def plot_cycle_time_quartile(df):
+def plot_cycle_time_quartile(df, title='Gait cycle distribution', save_fig_as=None):
     time_intervals = df.groupby('Exercise')['Time'].agg(np.ptp)
-    plt.figure()
-    plot_result = plt.boxplot(time_intervals)
+    fig = plt.figure(1, figsize=(7, 2))
+    ax = fig.add_subplot(111)
+    plot_result = ax.boxplot(time_intervals, whis='range', vert=False)
+    ax.set_title(title)
+    ax.set_xlabel('Cycle duration [s]')
+    ax.set_yticklabels([])
+
+    if not save_fig_as:
+        fig.show()
+    else:
+        fig.savefig('./figures/' + save_fig_as + '.png', bbox_inches='tight')
 
     return plot_result
 
