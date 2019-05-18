@@ -52,16 +52,6 @@ def save_np_dict_to_txt(dict_to_save, base_dir, data_fmt, headers=None):
             np.savetxt(base_dir + key + '.txt', dict_to_save[key], fmt=data_fmt)
 
 
-def normalize_emg(emg_data_dict, max_emg_dict):
-    for key in emg_data_dict:
-        ids = key.split()
-
-        emg_data_dict[key][:, 1:] = np.divide(
-            emg_data_dict[key][:, 1:],
-            max_emg_dict[ids[0] + ' ' + ids[1] + ' MaxEMG'])
-    return emg_data_dict
-
-
 def min_max_normalize_data(df, secondary_df=None, norm_emg=True, norm_torque=False):
     """Normalizes EMG data and/or torque data from pandas.DataFrame using sklearn.preprocessing.MinMaxScaler.
     If secondary_df is given then the scaling of the "primary" is done using the min and max from the "secondary"
@@ -152,7 +142,7 @@ def filter_torque(torque_data_dict, filt_order, lowcut, fs, axis_of_focus=0, cut
     save_np_dict_to_txt(torque_filt_data_dict, './data/labels/', data_fmt='%f', headers=headers)
 
 
-def filter_emg(emg_data_dict, lowcut, highcut, window, fs, cut_time=False, fs_mean_window=0, subject_id=None):
+def filter_emg(emg_data_dict, lowcut, highcut, window, fs, cut_time=False, fs_downsample=0, subject_id=None):
     emg_filt_data_dict = {}
     emg_headers = {}
     for key in emg_data_dict:
@@ -160,8 +150,8 @@ def filter_emg(emg_data_dict, lowcut, highcut, window, fs, cut_time=False, fs_me
             num_emg = len(emg_data_dict[key]["data"][0, :]) - 1
             t = emg_data_dict[key]["data"][:, 0]
             t_short = t_vec_after_ma(window, t)
-            if fs_mean_window > 0:
-                t_short = t_short[fs_mean_window-1::fs_mean_window]
+            if fs_downsample > 0:
+                t_short = np.ceil(t_short[fs_downsample-1::fs_downsample]*(fs/fs_downsample))*(fs_downsample/fs)
             filtered_emg = np.zeros(shape=(len(t_short), num_emg + 1))
             filtered_emg[:, 0] = t_short
             for i, column in enumerate(emg_data_dict[key]["data"][:, 1:].T):
@@ -169,9 +159,8 @@ def filter_emg(emg_data_dict, lowcut, highcut, window, fs, cut_time=False, fs_me
                 column = demodulation(column)
                 column, t = smoothing(column, t, window, fs)
                 column = relinearization(column)
-                if fs_mean_window > 0:
-                    tail = - (column.size % fs_mean_window) if column.size % fs_mean_window > 0 else column.size
-                    column = column[:tail].reshape(-1, fs_mean_window).mean(axis=-1)
+                if fs_downsample > 0:
+                    column = column[0::fs_downsample]
                 filtered_emg[:, i + 1] = column
 
             emg_filt_data_dict[key + ' filtered'] = filtered_emg
