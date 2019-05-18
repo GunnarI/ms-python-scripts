@@ -23,24 +23,24 @@ def t_vec_after_ma(n, t):
     return t
 
 
-def get_max_emg_array(max_emg_values, max_emg_exercise, emg_data, exercise_id, exercise_types=''):
+def get_max_emg_array(max_emg_values, max_emg_trial, emg_data, trial_id, trial_types=''):
     """Compare all values from new data set to previous maximum values and replace if they are larger
 
     :param max_emg_values: an array of previous max values, one value for each muscle
-    :param max_emg_exercise: a list of the names of the exercises where the max emg was found
-    :param emg_data: the emg data from a new exercise to compare to the max values from previous exercises
-    :param exercise_id: the name of the exercise corresponding to the new emg data
-    :param exercise_types: the exercise types to be included for the max emg (e.g. 'walk' looks only at exercises that
-    contain 'walk' in their exercise_id
-    :return: an updated max_emg_values array and corresponding max_emg_exercise list
+    :param max_emg_trial: a list of the names of the trials where the max emg was found
+    :param emg_data: the emg data from a new trial to compare to the max values from previous trials
+    :param trial_id: the name of the trial corresponding to the new emg data
+    :param trial_types: the trial types to be included for the max emg (e.g. 'walk' looks only at trials that
+    contain 'walk' in their trial_id
+    :return: an updated max_emg_values array and corresponding max_emg_trial list
     """
     for line in emg_data:
         for i in range(len(max_emg_values)):
-            if line[i] > max_emg_values[i] and exercise_types in exercise_id.lower():
+            if line[i] > max_emg_values[i] and trial_types in trial_id.lower():
                 max_emg_values[i] = line[i]
-                max_emg_exercise[i] = exercise_id
+                max_emg_trial[i] = trial_id
 
-    return max_emg_values, max_emg_exercise
+    return max_emg_values, max_emg_trial
 
 
 def save_np_dict_to_txt(dict_to_save, base_dir, data_fmt, headers=None):
@@ -69,8 +69,8 @@ def min_max_normalize_data(df, secondary_df=None, norm_emg=True, norm_torque=Fal
         time = return_df.pop('Time')
     if 'Torque' in col:
         torque = return_df.pop('Torque')
-    if 'Exercise' in col:
-        exercise = return_df.pop('Exercise')
+    if 'Trial' in col:
+        trial = return_df.pop('Trial')
 
     emg = return_df.values
 
@@ -87,8 +87,8 @@ def min_max_normalize_data(df, secondary_df=None, norm_emg=True, norm_torque=Fal
             scaling_df.pop('Time')
         if 'Torque' in col:
             s_torque = scaling_df.pop('Torque')
-        if 'Exercise' in col:
-            scaling_df.pop('Exercise')
+        if 'Trial' in col:
+            scaling_df.pop('Trial')
 
         s_emg = scaling_df.values
 
@@ -107,8 +107,8 @@ def min_max_normalize_data(df, secondary_df=None, norm_emg=True, norm_torque=Fal
         return_df.insert(0, 'Time', time)
     if 'Torque' in col:
         return_df['Torque'] = torque
-    if 'Exercise' in col:
-        return_df['Exercise'] = exercise
+    if 'Trial' in col:
+        return_df['Trial'] = trial
 
     return return_df
 
