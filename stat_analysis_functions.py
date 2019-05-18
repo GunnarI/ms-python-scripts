@@ -3,7 +3,7 @@ import numpy as np
 
 
 def get_min_med_max_cycles(df):
-    grouped_by_cycle = df.groupby('Exercise').size()
+    grouped_by_cycle = df.groupby('Trial').size()
     grouped_by_cycle = grouped_by_cycle.sort_values()
 
     min_cycle_len = grouped_by_cycle.iloc[0]
@@ -24,7 +24,7 @@ def get_muscle_std(df, muscle_list=None):
         muscle_list = list(df)
         muscle_list.remove('Time')
         muscle_list.remove('Torque')
-        muscle_list.remove('Exercise')
+        muscle_list.remove('Trial')
 
     muscle_list_std = np.zeros(len(muscle_list))
     for i, muscle in enumerate(muscle_list):
@@ -55,11 +55,11 @@ def plot_moment_avg(df, plot_min_med_max=False, title='Knee joint moments', ylab
     ax1.set_ylabel(ylabel)
 
     if plot_min_med_max:
-        ax1.plot(df.loc[df['Exercise'] == min_cycle[0], 'Time'], df.loc[df['Exercise'] == min_cycle[0], 'Torque'],
+        ax1.plot(df.loc[df['Trial'] == min_cycle[0], 'Time'], df.loc[df['Trial'] == min_cycle[0], 'Torque'],
                  label='Fastest cycle')
-        ax1.plot(df.loc[df['Exercise'] == max_cycle[0], 'Time'], df.loc[df['Exercise'] == max_cycle[0], 'Torque'],
+        ax1.plot(df.loc[df['Trial'] == max_cycle[0], 'Time'], df.loc[df['Trial'] == max_cycle[0], 'Torque'],
                  label='Slowest cycle')
-        ax1.plot(df.loc[df['Exercise'] == med_cycle[0], 'Time'], df.loc[df['Exercise'] == med_cycle[0], 'Torque'],
+        ax1.plot(df.loc[df['Trial'] == med_cycle[0], 'Time'], df.loc[df['Trial'] == med_cycle[0], 'Torque'],
                  label='Median cycle')
     ax1.legend()
 
@@ -77,7 +77,7 @@ def plot_muscle_average(df, muscle_list=None, plot_min_and_max=False, title='EMG
         muscle_list = list(df)
         muscle_list.remove('Time')
         muscle_list.remove('Torque')
-        muscle_list.remove('Exercise')
+        muscle_list.remove('Trial')
 
     num_plots = len(muscle_list)
     fig, axs = plt.subplots(num_plots, 1, sharex=True, figsize=(7, 1.7 * num_plots), squeeze=False)
@@ -97,14 +97,14 @@ def plot_muscle_average(df, muscle_list=None, plot_min_and_max=False, title='EMG
         axs[i, 0].set_xlabel('gait cycle duration [s]')
 
         if plot_min_and_max:
-            axs[i, 0].plot(df.loc[df['Exercise'] == min_cycle[0], 'Time'],
-                           df.loc[df['Exercise'] == min_cycle[0], muscle],
+            axs[i, 0].plot(df.loc[df['Trial'] == min_cycle[0], 'Time'],
+                           df.loc[df['Trial'] == min_cycle[0], muscle],
                            label='Fastest cycle')
-            axs[i, 0].plot(df.loc[df['Exercise'] == max_cycle[0], 'Time'],
-                           df.loc[df['Exercise'] == max_cycle[0], muscle],
+            axs[i, 0].plot(df.loc[df['Trial'] == max_cycle[0], 'Time'],
+                           df.loc[df['Trial'] == max_cycle[0], muscle],
                            label='Slowest cycle')
-            axs[i, 0].plot(df.loc[df['Exercise'] == med_cycle[0], 'Time'],
-                           df.loc[df['Exercise'] == med_cycle[0], muscle],
+            axs[i, 0].plot(df.loc[df['Trial'] == med_cycle[0], 'Time'],
+                           df.loc[df['Trial'] == med_cycle[0], muscle],
                            label='Median cycle')
 
         axs[i, 0].set_ylim(0, 0.99)
@@ -123,7 +123,7 @@ def plot_muscle_average(df, muscle_list=None, plot_min_and_max=False, title='EMG
 
 
 def plot_cycle_time_quartile(df, title='Gait cycle distribution', save_fig_as=None):
-    time_intervals = df.groupby('Exercise')['Time'].agg(np.ptp)
+    time_intervals = df.groupby('Trial')['Time'].agg(np.ptp)
     fig = plt.figure(1, figsize=(7, 2))
     ax = fig.add_subplot(111)
     plot_result = ax.boxplot(time_intervals, whis='range', vert=False)
@@ -169,9 +169,9 @@ def plot_moment_w_muscle(df, plot_trial='average', muscle_list=None, title='Mome
         moments = df.groupby('Time')['Torque'].mean()
         time_vec = moments.index
     else:
-        selected_exercise = df.Exercise.str.contains(plot_trial)
-        moments = df.Torque[selected_exercise]
-        time_vec = df.Time[selected_exercise]
+        selected_trial = df.Trial.str.contains(plot_trial)
+        moments = df.Torque[selected_trial]
+        time_vec = df.Time[selected_trial]
 
     fig, ax1 = plt.subplots(figsize=(7, 5))
     fig.suptitle(title)
@@ -191,7 +191,7 @@ def plot_moment_w_muscle(df, plot_trial='average', muscle_list=None, title='Mome
                 ax2.plot(time_vec, emg_avg.values, color=colors[i], label=muscle)
         else:
             for i, muscle in enumerate(muscle_list):
-                emg = df[muscle][selected_exercise]
+                emg = df[muscle][selected_trial]
                 ax2.plot(time_vec, emg.values, color=colors[i], label=muscle)
 
     fig.legend()
@@ -207,9 +207,9 @@ def plot_moment_derivative(df, plot_trial='average', muscle_list=None):
         moments = df.groupby('Time')['Torque'].mean()
         time_vec = moments.index
     else:
-        selected_exercise = df.Exercise.str.contains(plot_trial)
-        moments = df.Torque[selected_exercise]
-        time_vec = df.Time[selected_exercise]
+        selected_trial = df.Trial.str.contains(plot_trial)
+        moments = df.Torque[selected_trial]
+        time_vec = df.Time[selected_trial]
 
     moment_derivative = np.diff(moments)
 
@@ -228,5 +228,5 @@ def plot_moment_derivative(df, plot_trial='average', muscle_list=None):
                 ax2.plot(time_vec[:-1], emg_avg.values[:-1])
         else:
             for i, muscle in enumerate(muscle_list):
-                emg = df[muscle][selected_exercise]
+                emg = df[muscle][selected_trial]
                 ax2.plot(time_vec[:-1], emg.values[:-1])

@@ -25,15 +25,15 @@ def build_model(train_dataset):
     return model
 
 
-def create_train_and_test(df, frac=0.8, randomize_by_exercise=True):
+def create_train_and_test(df, frac=0.8, randomize_by_trial=True):
     dataset = df.copy()
-    if randomize_by_exercise:
-        exercise_groups = dataset.groupby('Exercise')
-        group_num = np.arange(exercise_groups.ngroups)
+    if randomize_by_trial:
+        trial_groups = dataset.groupby('Trial')
+        group_num = np.arange(trial_groups.ngroups)
         np.random.shuffle(group_num)
 
         train_dataset = dataset[
-            exercise_groups.ngroup().isin(group_num[:np.floor(frac * len(group_num) - 1).astype('int')])
+            trial_groups.ngroup().isin(group_num[:np.floor(frac * len(group_num) - 1).astype('int')])
         ]
     else:
         train_dataset = dataset.sample(frac=frac, random_state=0)
@@ -48,9 +48,9 @@ def prepare_data(data_dict, subject_id=None):
         if subject_id is None:
             dataset = data_dict[key].copy()
             train_dataset, test_dataset = create_train_and_test(dataset, frac=0.8)
-            train_dataset.pop('Exercise')
+            train_dataset.pop('Trial')
             train_dataset.pop('Time')
-            test_exercise = test_dataset.pop('Exercise')
+            test_trial = test_dataset.pop('Trial')
             test_times = test_dataset.pop('Time')
 
             norm_train_data = filt.min_max_normalize_data(train_dataset, norm_emg=True, norm_torque=True)
@@ -59,9 +59,9 @@ def prepare_data(data_dict, subject_id=None):
         elif subject_id in key:
             dataset = data_dict[key].copy()
             train_dataset, test_dataset = create_train_and_test(dataset, frac=0.8)
-            train_dataset.pop('Exercise')
+            train_dataset.pop('Trial')
             train_dataset.pop('Time')
-            test_exercise = test_dataset.pop('Exercise')
+            test_trial = test_dataset.pop('Trial')
             test_times = test_dataset.pop('Time')
 
             norm_train_data = filt.min_max_normalize_data(train_dataset, norm_emg=True, norm_torque=True)
@@ -73,15 +73,15 @@ def prepare_data(data_dict, subject_id=None):
 
 def split_trials_by_duration(df, time_lim=None):
     normal_walk = df.copy()
-    durations = normal_walk.groupby(['Exercise'])['Time'].max().to_frame(name='Time')
+    durations = normal_walk.groupby(['Trial'])['Time'].max().to_frame(name='Time')
     durations.reset_index(level=0, inplace=True)
     if time_lim is None:
         min_time = durations.Time.min()
         max_time = durations.Time.max()
         time_lim = (min_time + (max_time - min_time)/3, min_time + 2 * (max_time - min_time)/3)
 
-    fast_walk = normal_walk[normal_walk.Exercise.isin(durations[durations.Time < time_lim[0]].Exercise.values)]
-    slow_walk = normal_walk[normal_walk.Exercise.isin(durations[durations.Time > time_lim[1]].Exercise.values)]
+    fast_walk = normal_walk[normal_walk.Trial.isin(durations[durations.Time < time_lim[0]].Trial.values)]
+    slow_walk = normal_walk[normal_walk.Trial.isin(durations[durations.Time > time_lim[1]].Trial.values)]
     normal_walk = normal_walk.drop(fast_walk.index)
     normal_walk = normal_walk.drop(slow_walk.index)
 
