@@ -9,6 +9,7 @@ from tensorflow.keras import layers
 
 import filters as filt
 
+
 def build_model(train_dataset):
     model = keras.Sequential([
         layers.Dense(64, activation=tf.nn.relu, input_shape=[len(train_dataset.keys())]),
@@ -70,6 +71,23 @@ def prepare_data(data_dict, subject_id=None):
             break
 
 
+def split_trials_by_duration(df, time_lim=None):
+    normal_walk = df.copy()
+    durations = normal_walk.groupby(['Exercise'])['Time'].max().to_frame(name='Time')
+    durations.reset_index(level=0, inplace=True)
+    if time_lim is None:
+        min_time = durations.Time.min()
+        max_time = durations.Time.max()
+        time_lim = (min_time + (max_time - min_time)/3, min_time + 2 * (max_time - min_time)/3)
+
+    fast_walk = normal_walk[normal_walk.Exercise.isin(durations[durations.Time < time_lim[0]].Exercise.values)]
+    slow_walk = normal_walk[normal_walk.Exercise.isin(durations[durations.Time > time_lim[1]].Exercise.values)]
+    normal_walk = normal_walk.drop(fast_walk.index)
+    normal_walk = normal_walk.drop(slow_walk.index)
+
+    return slow_walk, normal_walk, fast_walk
+
+
 class PrintDot(keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs):
         if epoch % 100 == 0: print('')
@@ -98,3 +116,6 @@ def plot_history(history):
              label='Val Error')
     plt.legend()
     plt.show()
+
+
+
