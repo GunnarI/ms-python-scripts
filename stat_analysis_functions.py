@@ -19,7 +19,22 @@ def get_min_med_max_cycles(df):
     return (min_cycle, min_cycle_len), (median_cycle, median_cycle_len), (max_cycle, max_cycle_len)
 
 
-def plot_moment_avg(df, plot_min_med_max=False, save_fig_as=None):
+def get_muscle_std(df, muscle_list=None):
+    if not muscle_list:
+        muscle_list = list(df)
+        muscle_list.remove('Time')
+        muscle_list.remove('Torque')
+        muscle_list.remove('Exercise')
+
+    muscle_list_std = np.zeros(len(muscle_list))
+    for i, muscle in enumerate(muscle_list):
+        muscle_list_std[i] = np.mean(df.groupby('Time')[muscle].std())
+
+    return muscle_list_std
+
+
+def plot_moment_avg(df, plot_min_med_max=False, title='Knee joint moments', ylabel=r'joint moment $[\frac{N.mm}{kg}]$',
+                    save_fig_as=None):
     min_cycle, med_cycle, max_cycle = get_min_med_max_cycles(df)
     fig = plt.figure(figsize=(8, 5))
     ax1 = plt.subplot()
@@ -35,9 +50,9 @@ def plot_moment_avg(df, plot_min_med_max=False, save_fig_as=None):
 
     ax1.fill_between(time_vec, std_range[0], std_range[1], alpha=0.2)
     ax1.plot(time_vec, moment_avg, label='Average')
-    ax1.set_title('Knee joint moments')
+    ax1.set_title(title)
     ax1.set_xlabel('gait cycle duration [s]')
-    ax1.set_ylabel('joint moment [N.mm/kg]')
+    ax1.set_ylabel(ylabel)
 
     if plot_min_med_max:
         ax1.plot(df.loc[df['Exercise'] == min_cycle[0], 'Time'], df.loc[df['Exercise'] == min_cycle[0], 'Torque'],
@@ -68,7 +83,7 @@ def plot_muscle_average(df, muscle_list=None, plot_min_and_max=False, title='EMG
     fig, axs = plt.subplots(num_plots, 1, sharex=True, figsize=(7, 1.7 * num_plots), squeeze=False)
     fig.subplots_adjust(hspace=0.04)
     fig.suptitle(title)
-    fig.text(0.06, 0.5, 'Normalized amplitdue [V/V]', ha='right', va='center', rotation='vertical')
+    fig.text(0.06, 0.5, 'Normalized amplitude [V/V]', ha='right', va='center', rotation='vertical')
     for i, muscle in enumerate(muscle_list):
         emg_avg = df.groupby('Time')[muscle].mean()
         emg_std = df.groupby('Time')[muscle].std()
@@ -147,15 +162,71 @@ def plot_emg_torque(df, emg_to_plot):
         plt.show()
 
 
-def get_muscle_std(df, muscle_list=None):
-    if not muscle_list:
-        muscle_list = list(df)
-        muscle_list.remove('Time')
-        muscle_list.remove('Torque')
-        muscle_list.remove('Exercise')
+def plot_moment_w_muscle(df, plot_trial='average', muscle_list=None, title='Moments and EMG',
+                         moment_label=r'$\Delta$ joint moment $[\frac{N.mm}{kg.s}]$',
+                         emg_label=r'normalized emg $[V/V]$', save_fig_as=None):
+    if plot_trial == 'average' or plot_trial == 'mean':
+        moments = df.groupby('Time')['Torque'].mean()
+        time_vec = moments.index
+    else:
+        selected_exercise = df.Exercise.str.contains(plot_trial)
+        moments = df.Torque[selected_exercise]
+        time_vec = df.Time[selected_exercise]
 
-    muscle_list_std = np.zeros(len(muscle_list))
-    for i, muscle in enumerate(muscle_list):
-        muscle_list_std[i] = np.mean(df.groupby('Time')[muscle].std())
+    fig, ax1 = plt.subplots(figsize=(7, 5))
+    fig.suptitle(title)
 
-    return muscle_list_std
+    color = 'blue'
+    ax1.set_xlabel('gait cycle duration[s]')
+    ax1.set_ylabel(moment_label)
+    ax1.plot(time_vec, moments, color=color, label='Joint moment')
+
+    if muscle_list is not None:
+        colors = ['red', 'green', 'cyan', 'yellow']
+        ax2 = ax1.twinx()
+        ax2.set_ylabel(emg_label)
+        if plot_trial == 'average' or plot_trial == 'mean':
+            for i, muscle in enumerate(muscle_list):
+                emg_avg = df.groupby('Time')[muscle].mean()
+                ax2.plot(time_vec, emg_avg.values, color=colors[i], label=muscle)
+        else:
+            for i, muscle in enumerate(muscle_list):
+                emg = df[muscle][selected_exercise]
+                ax2.plot(time_vec, emg.values, color=colors[i], label=muscle)
+
+    fig.legend()
+
+    if not save_fig_as:
+        fig.show()
+    else:
+        fig.savefig('./figures/' + save_fig_as + '.png', bbox_inches='tight')
+
+
+def plot_moment_derivative(df, plot_trial='average', muscle_list=None):
+    if plot_trial == 'average' or plot_trial == 'mean':
+        moments = df.groupby('Time')['Torque'].mean()
+        time_vec = moments.index
+    else:
+        selected_exercise = df.Exercise.str.contains(plot_trial)
+        moments = df.Torque[selected_exercise]
+        time_vec = df.Time[selected_exercise]
+
+    moment_derivative = np.diff(moments)
+
+    #plt.figure()
+    fig, ax1 = plt.subplots()
+    ax1.set_xlabel('gait cycle duration[s]')
+    ax1.set_ylabel(r'$\Delta$ joint moment $[\frac{N.mm}{kg.s}]$')
+    ax1.plot(time_vec[:-1], moment_derivative)
+
+    if muscle_list is not None:
+        ax2 = ax1.twinx()
+        ax2.set_ylabel(r'normalized emg $[V/V]$')
+        if plot_trial == 'average' or plot_trial == 'mean':
+            for i, muscle in enumerate(muscle_list):
+                emg_avg = df.groupby('Time')[muscle].mean()
+                ax2.plot(time_vec[:-1], emg_avg.values[:-1])
+        else:
+            for i, muscle in enumerate(muscle_list):
+                emg = df[muscle][selected_exercise]
+                ax2.plot(time_vec[:-1], emg.values[:-1])
