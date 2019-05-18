@@ -376,7 +376,7 @@ def get_gait_cycles(file):
             while row[event_time_col] == time_value:
                 row = next(reader)
 
-        assert (len(right_fp_time) > 0), 'No right foot heal strike detected in file: ' + file
+        assert (len(right_fp_time) > 0), 'No right foot FP event detected: ' + file
 
         while 'Right' != row[event_context_col]:
             row = next(reader)
@@ -392,13 +392,31 @@ def get_gait_cycles(file):
         right_fp_time = np.array(right_fp_time, dtype=np.float)
         gait_cycles_time = np.array(gait_cycles_time, dtype=np.float)
         gait_cycle_dict = {}
+        faulty_cycle_num = 0
         for i in range(len(right_fp_time)):
-            gait_cycle_dict['Cycle' + str(i + 1)] = {
-                'Start': np.around(np.max(gait_cycles_time[np.where(gait_cycles_time < right_fp_time[i])]), decimals=2),
-                'End': np.around(gait_cycles_time[np.where(gait_cycles_time > right_fp_time[i])][1], decimals=2)
+            items_before_fp_max, = np.where(gait_cycles_time < right_fp_time[i])
+            items_after_fp_max, = np.where(gait_cycles_time > right_fp_time[i])
+            if items_before_fp_max.size > 0 and items_after_fp_max.size > 0:
+                faulty_cycle = not (
+                        gait_cycles_name[items_before_fp_max[items_before_fp_max.size-1]] == 'Foot Strike' and
+                        gait_cycles_name[items_after_fp_max[0]] == 'Foot Off' and
+                        gait_cycles_name[items_after_fp_max[1]] == 'Foot Strike'
+                )
+            else:
+                faulty_cycle = True
+
+            if faulty_cycle:
+                faulty_cycle_num = faulty_cycle_num + 1
+                continue
+
+            gait_cycle_dict['Cycle' + str(i + 1 - faulty_cycle_num)] = {
+                'Start': np.around(gait_cycles_time[items_before_fp_max[len(items_before_fp_max)-1]], decimals=2),
+                'End': np.around(gait_cycles_time[items_after_fp_max[1]], decimals=2)
             }
 
+        assert (len(right_fp_time)-faulty_cycle_num > 0), 'All right foot cycles defective in: ' + file
+
         t1 = gait_cycle_dict['Cycle1']['Start']
-        t2 = gait_cycle_dict['Cycle' + str(len(right_fp_time))]['End']
+        t2 = gait_cycle_dict['Cycle' + str(len(right_fp_time)-faulty_cycle_num)]['End']
 
     return t1, t2, gait_cycle_dict
