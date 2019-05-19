@@ -2,10 +2,10 @@ import os
 import sys
 import csv
 import json
+import warnings
 from pathlib import Path
 import numpy as np
 import pandas as pd
-
 
 class DataManager:
     def __init__(self, base_dir):
@@ -14,6 +14,7 @@ class DataManager:
         self.torque_data_dict = {}
         self.filt_data_dict = {}
         self.filt_concat_data_dict = {}
+        self.list_of_pandas = {}
 
         with open('./data_structure.json', 'r') as ds:
             self.data_struct = json.load(ds)
@@ -71,9 +72,9 @@ class DataManager:
                                 # Load emg data
                                 if os.path.isfile(emg_array_dir) and not reload:
                                     self.emg_data_dict[session_trial_id] = {"headers": emg_headers,
-                                                                             "data": np.loadtxt(emg_array_dir),
-                                                                             "t1": t1, "t2": t2,
-                                                                             "gait_cycles": gait_cycles}
+                                                                            "data": np.loadtxt(emg_array_dir),
+                                                                            "t1": t1, "t2": t2,
+                                                                            "gait_cycles": gait_cycles}
                                 else:
                                     emg_data = get_emg_from_csv(trial["File"], emg_device, num_emg, frame_freq,
                                                                 analog_freq)
@@ -138,6 +139,10 @@ class DataManager:
                                     self.emg_data_dict[session_trial_id] = {"headers": emg_headers, "data": emg_data}
                                     np.savetxt(emg_array_dir, emg_data, fmt='%f')
 
+                        if load_filt:
+                            df_name_to_cache = session_id + ' ' + subject_id + ' filtered'
+                            self.add_pandas(self.filt_concat_data_dict[df_name_to_cache], df_name_to_cache)
+
     def update_filt_data_dict(self):
         for key in self.torque_data_dict:
             ids = key.split()
@@ -166,6 +171,39 @@ class DataManager:
                         .str.contains(ids[2] + cycle).any():
                     self.filt_concat_data_dict[ids[0] + ' ' + ids[1] + ' filtered'] = pd.concat(
                         [self.filt_concat_data_dict[ids[0] + ' ' + ids[1] + ' filtered'], df_to_add], ignore_index=True)
+
+    def add_pandas(self, df, name):
+        if name in self.list_of_pandas.keys():
+            warnings.warn('A dataframe with this name already exists')
+            return
+
+        df.name = name
+        df.to_pickle('./data/cache/' + name + '.pkl')
+        self.list_of_pandas[name] = df
+
+    def update_pandas(self, df, rename=None):
+        if df.name not in self.list_of_pandas.keys():
+            warnings.warn('This dataframe does not exists, use add_pandas(df, name) instead')
+            return
+
+        if rename is not None:
+            self.remove_pandas(df)
+            self.add_pandas(df, rename)
+        else:
+            df.to_pickle('./data/cache/' + df.name + '.pkl')
+            self.list_of_pandas[df.name] = df
+
+    def remove_pandas(self, df):
+            os.remove('./data/cache/' + df.name + '.pkl')
+            del self.list_of_pandas[df.name]
+
+    def load_pandas(self):
+        files = Path('./data/cache/').glob('*.pkl')
+
+        for file in files:
+            df = pd.read_pickle(str(file))
+            df.name = file.stem
+            self.list_of_pandas[file.stem] = df
 
 
 # Creates the new subject dictionary including all sessions and experiments
