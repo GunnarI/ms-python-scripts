@@ -1,74 +1,186 @@
+import os
+
 import matplotlib.pyplot as plt
+from pathlib import Path
+import pickle
+import time
 import pandas as pd
-import seaborn as sns
 import numpy as np
 
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras import layers
+from tensorflow.python.keras import layers
+from tensorflow.python.keras.models import load_model
+from tensorflow.python.keras import optimizers
 
 import filters as filt
 
 
-def build_model(train_dataset):
-    model = keras.Sequential([
-        layers.Dense(64, activation=tf.nn.relu, input_shape=[len(train_dataset.keys())]),
-        layers.Dense(64, activation=tf.nn.relu),
-        layers.Dense(1)
-    ])
+class ANN:
+    def __init__(self, dataset=None, spec_cache_code=None, load_from_cache=None):
+        if load_from_cache is None and dataset is not None:
+            self.cache_path = ''
+            self.create_cache_dir(spec_cache_code)
+            self.dataset = dataset
+            self.train_dataset = pd.DataFrame()
+            self.test_dataset = pd.DataFrame()
+            self.prepare_data()
+            self.models = {}
+        else:
+            if load_from_cache is None:
+                cached_folders = Path('./cache/').glob('[0-9]*?*')
+                newest_cache = 0
+                for folder in cached_folders:
+                    folder_time_stamp = folder.stem.split(' ')[0]
+                    if folder_time_stamp > newest_cache:
+                        newest_cache = folder_time_stamp
+                        load_from_cache = folder.stem
 
-    optimizer = tf.keras.optimizers.RMSprop(0.001)
+            self.cache_path = './cache/' + load_from_cache + '/'
+            if os.path.exists(self.cache_path):
+                self.load_datasets()
+                self.models = {}
+                self.load_models()
+            else:
+                raise ValueError('A cache path for ' + load_from_cache + ' was not found')
 
-    model.compile(loss='mean_squared_error',
-                  optimizer=optimizer,
-                  metrics=['mean_absolute_error', 'mean_squared_error'])
-    return model
+    def create_train_and_test(self, frac=0.8, randomize_by_trial=True):
+        """ Splits a pandas.DataFrame into train-, and test-dataset
 
+        :param df: The DataFrame
+        :param frac: The fraction of the DataFrame that will be used as training dataset, default: 0.8.
+        Note if randomize_by_trial=True then this is the fraction of trials/cycles used, where number of samples within
+        trial/cycle may vary
+        :param randomize_by_trial: If True then the split is done trial/cycle wise such that all samples within a trial
+        or cycle are put together into a dataset, default: True
+        :return: the two datasets for training and testing: train_dataset, test_dataset
+        """
+        dataset = self.dataset.copy()
+        if randomize_by_trial:
+            trial_groups = dataset.groupby('Trial')
+            group_num = np.arange(trial_groups.ngroups)
+            np.random.shuffle(group_num)
 
-def create_train_and_test(df, frac=0.8, randomize_by_trial=True):
-    dataset = df.copy()
-    if randomize_by_trial:
-        trial_groups = dataset.groupby('Trial')
-        group_num = np.arange(trial_groups.ngroups)
-        np.random.shuffle(group_num)
+            train_dataset = dataset[
+                trial_groups.ngroup().isin(group_num[:np.floor(frac * len(group_num) - 1).astype('int')])
+            ]
 
-        train_dataset = dataset[
-            trial_groups.ngroup().isin(group_num[:np.floor(frac * len(group_num) - 1).astype('int')])
-        ]
-    else:
-        train_dataset = dataset.sample(frac=frac, random_state=0)
+            trial_groups = [df for _, df in train_dataset.groupby('Trial')]
+            np.random.shuffle(trial_groups)
+            train_dataset = pd.concat(trial_groups)
+        else:
+            train_dataset = dataset.sample(frac=frac, random_state=0)
 
-    test_dataset = dataset.drop(train_dataset.index)
-    return train_dataset, test_dataset
+        test_dataset = dataset.drop(train_dataset.index)
+        self.train_dataset = train_dataset.reset_index(drop=True)
+        self.test_dataset = test_dataset.reset_index(drop=True)
 
+    def prepare_data(self, split_frac=0.8, normalize=True):
+        self.dataset.dropna(inplace=True)
+        self.create_train_and_test(frac=split_frac)
 
-def prepare_data(data_dict, subject_id=None):
-    # TODO: unfinished, needs to be evaluated and finished
-    for key in data_dict:
-        if subject_id is None:
-            dataset = data_dict[key].copy()
-            train_dataset, test_dataset = create_train_and_test(dataset, frac=0.8)
-            train_dataset.pop('Trial')
+        if normalize:
+            self.test_dataset = filt.min_max_normalize_data(self.test_dataset, secondary_df=self.train_dataset,
+                                                            norm_emg=True, norm_torque=True)
+            self.train_dataset = filt.min_max_normalize_data(self.train_dataset, norm_emg=True, norm_torque=True)
+
+        self.save_datasets()
+
+    def update_train_and_test(self, frac=0.8, randomize_by_trial=True, normalize=True):
+        self.create_train_and_test(frac=frac, randomize_by_trial=randomize_by_trial)
+        if normalize:
+            self.test_dataset = filt.min_max_normalize_data(self.test_dataset, secondary_df=self.train_dataset,
+                                                            norm_emg=True, norm_torque=True)
+            self.train_dataset = filt.min_max_normalize_data(self.train_dataset, norm_emg=True, norm_torque=True)
+
+    def train_mlp(self, optimizer='rmsprop', model_name='mlp'):
+        train_dataset = self.train_dataset.copy()
+        test_dataset = self.test_dataset.copy()
+        if 'Time' in train_dataset.columns:
             train_dataset.pop('Time')
-            test_trial = test_dataset.pop('Trial')
-            test_times = test_dataset.pop('Time')
-
-            norm_train_data = filt.min_max_normalize_data(train_dataset, norm_emg=True, norm_torque=True)
-            norm_test_data = filt.min_max_normalize_data(test_dataset, secondary_df=train_dataset, norm_emg=True,
-                                                         norm_torque=True)
-        elif subject_id in key:
-            dataset = data_dict[key].copy()
-            train_dataset, test_dataset = create_train_and_test(dataset, frac=0.8)
+        if 'Trial' in train_dataset.columns:
             train_dataset.pop('Trial')
-            train_dataset.pop('Time')
-            test_trial = test_dataset.pop('Trial')
-            test_times = test_dataset.pop('Time')
+        if 'Time' in test_dataset.columns:
+            test_dataset.pop('Time')
+        if 'Trial' in test_dataset.columns:
+            test_dataset.pop('Trial')
 
-            norm_train_data = filt.min_max_normalize_data(train_dataset, norm_emg=True, norm_torque=True)
-            norm_test_data = filt.min_max_normalize_data(test_dataset, secondary_df=train_dataset, norm_emg=True,
-                                                         norm_torque=True)
+        train_labels = train_dataset.pop('Torque')
+        test_labels = test_dataset.pop('Torque')
 
-            break
+        model = keras.Sequential([
+            layers.Dense(64, activation=tf.nn.relu, input_shape=[len(train_dataset.keys())]),
+            layers.Dense(64, activation=tf.nn.relu),
+            layers.Dense(1)
+        ])
+
+        # optimizer = tf.keras.optimizers.RMSprop()
+        # optimizer = tf.keras.optimizers.Adam()
+        if optimizer == 'rmsprop':
+            optimizer = optimizers.RMSprop()
+        elif optimizer == 'adam':
+            optimizer = optimizers.Adam()
+
+        model.compile(loss='mean_squared_error',
+                      optimizer=optimizer,
+                      metrics=['mean_absolute_error', 'mean_squared_error'])
+
+        early_stop = keras.callbacks.EarlyStopping(monitor='val_loss', patience=100)
+
+        history = model.fit(
+            train_dataset, train_labels,
+            epochs=1000, validation_split=0.2, verbose=1,
+            callbacks=[early_stop])
+
+        self.save_model(model, model_name)
+
+        plot_history(history)
+
+        loss, mae, mse = model.evaluate(test_dataset, test_labels, verbose=0)
+
+        print("Testing set knee torque Mean Abs Error: {:5.2f} Nmm".format(mae))
+
+    def create_cache_dir(self, spec_cache_code=None):
+        if spec_cache_code is None:
+            self.cache_path = './cache/' + time.strftime('%Y%m%d%H%M') + '/'
+        else:
+            self.cache_path = './cache/' + time.strftime('%Y%m%d%H%M') + ' ' + spec_cache_code + '/'
+        try:
+            os.mkdir(self.cache_path)
+            os.mkdir(self.cache_path + 'models/')
+            os.mkdir(self.cache_path + 'dataframes/')
+        except FileExistsError:
+            print('Cache directory ', self.cache_path, ' already exists')
+
+    def save_datasets(self):
+        self.dataset.to_pickle(self.cache_path + 'dataframes/dataset.pkl')
+        self.test_dataset.to_pickle(self.cache_path + 'dataframes/test_dataset.pkl')
+        self.train_dataset.to_pickle(self.cache_path + 'dataframes/train_dataset.pkl')
+
+    def load_datasets(self):
+        self.dataset = pd.read_pickle(self.cache_path + 'dataframes/dataset.pkl')
+        self.train_dataset = pd.read_pickle(self.cache_path + 'dataframes/train_dataset.pkl')
+        self.test_dataset = pd.read_pickle(self.cache_path + 'dataframes/test_dataset.pkl')
+
+    def save_model(self, model, model_name):
+        model.save(self.cache_path + 'models/' + model_name + '.h5')
+        self.models[model_name] = model
+
+    def load_models(self):
+        models_paths = Path(self.cache_path + 'models/').glob('*.h5')
+        for model_path in models_paths:
+            self.models[model_path.stem] = load_model(str(model_path))
+
+    def plot_test(self, model_name, cycle_to_plot='random'):
+        if cycle_to_plot == 'random':
+            cycle_to_plot = self.test_dataset.sample(n=1).Trial.to_string(index=False).strip()
+        test_cycle = self.test_dataset[self.test_dataset.Trial == cycle_to_plot]
+        test_time = test_cycle.pop('Time')
+        test_torque = test_cycle.pop('Torque')
+        test_trial = test_cycle.pop('Trial')
+        test_prediction = self.models[model_name].predict(test_cycle)
+        plt.figure()
+        plt.plot(test_time, test_torque, test_time, test_prediction)
 
 
 def split_trials_by_duration(df, time_lim=None):
@@ -86,12 +198,6 @@ def split_trials_by_duration(df, time_lim=None):
     normal_walk = normal_walk.drop(slow_walk.index)
 
     return slow_walk, normal_walk, fast_walk
-
-
-class PrintDot(keras.callbacks.Callback):
-    def on_epoch_end(self, epoch, logs):
-        if epoch % 100 == 0: print('')
-        print('.', end='')
 
 
 def plot_history(history):
@@ -116,6 +222,3 @@ def plot_history(history):
              label='Val Error')
     plt.legend()
     plt.show()
-
-
-
