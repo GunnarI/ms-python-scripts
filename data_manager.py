@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+
 class DataManager:
     def __init__(self, base_dir):
         self.base_dir = base_dir
@@ -79,22 +80,22 @@ class DataManager:
                                     emg_data = get_emg_from_csv(trial["File"], emg_device, num_emg, frame_freq,
                                                                 analog_freq)
                                     self.emg_data_dict[session_trial_id] = {"headers": emg_headers,
-                                                                             "data": emg_data, "t1": t1, "t2": t2,
-                                                                             "gait_cycles": gait_cycles}
+                                                                            "data": emg_data, "t1": t1, "t2": t2,
+                                                                            "gait_cycles": gait_cycles}
                                     np.savetxt(emg_array_dir, emg_data, fmt='%f')
 
                                 # Load torque data
                                 torque_array_dir = './data/labels/' + session_trial_id + '.txt'
                                 if os.path.isfile(torque_array_dir) and not reload:
                                     self.torque_data_dict[session_trial_id] = {"data": np.loadtxt(torque_array_dir),
-                                                                                "t1": t1, "t2": t2,
-                                                                                "gait_cycles": gait_cycles}
+                                                                               "t1": t1, "t2": t2,
+                                                                               "gait_cycles": gait_cycles}
                                 else:
                                     torque_data = get_torque_from_csv(trial["File"],
                                                                       subject_id + ':RKneeMoment',
                                                                       frame_freq)
                                     self.torque_data_dict[session_trial_id] = {"data": torque_data, "t1": t1, "t2": t2,
-                                                                                "gait_cycles": gait_cycles}
+                                                                               "gait_cycles": gait_cycles}
                                     np.savetxt(torque_array_dir, torque_data, fmt='%f')
 
                                 # Load filtered data
@@ -132,7 +133,7 @@ class DataManager:
                             else:
                                 if os.path.isfile(emg_array_dir) and not reload:
                                     self.emg_data_dict[session_trial_id] = {"headers": emg_headers,
-                                                                             "data": np.loadtxt(emg_array_dir)}
+                                                                            "data": np.loadtxt(emg_array_dir)}
                                 else:
                                     emg_data = get_emg_from_csv(trial["File"],
                                                                 emg_device, num_emg, frame_freq, analog_freq)
@@ -151,7 +152,6 @@ class DataManager:
             filt_emg_array_dir = './data/' + key + ' filtered.txt'
             filt_torque_array_dir = './data/labels/' + key + ' filtered.txt'
             if os.path.isfile(filt_emg_array_dir) and os.path.isfile(filt_torque_array_dir):
-                # gait_cycle_dict = self.torque_data_dict[key]['gait_cycles']
                 for cycle in gait_cycle_dict:
                     pd_emg = pd.read_csv(filt_emg_array_dir, sep=' ').set_index('Time').truncate(
                         gait_cycle_dict[cycle]['Start'], gait_cycle_dict[cycle]['End'])
@@ -172,33 +172,39 @@ class DataManager:
                     self.filt_concat_data_dict[ids[0] + ' ' + ids[1] + ' filtered'] = pd.concat(
                         [self.filt_concat_data_dict[ids[0] + ' ' + ids[1] + ' filtered'], df_to_add], ignore_index=True)
 
+            df_name_to_cache = ids[0] + ' ' + ids[1] + ' filtered'
+            df_to_cache = self.filt_concat_data_dict[df_name_to_cache].copy()
+            df_to_cache.name = df_name_to_cache
+            self.update_pandas(df_to_cache)
+
     def add_pandas(self, df, name):
         if name in self.list_of_pandas.keys():
             warnings.warn('A dataframe with this name already exists')
             return
 
         df.name = name
-        df.to_pickle('./data/cache/' + name + '.pkl')
+        df.to_pickle('./cache/dataframes/' + name + '.pkl')
         self.list_of_pandas[name] = df
 
     def update_pandas(self, df, rename=None):
         if df.name not in self.list_of_pandas.keys():
-            warnings.warn('This dataframe does not exists, use add_pandas(df, name) instead')
+            self.add_pandas(df, df.name)
+            warnings.warn('This dataframe did not exists, used add_pandas(df, name) instead')
             return
 
         if rename is not None:
             self.remove_pandas(df)
             self.add_pandas(df, rename)
         else:
-            df.to_pickle('./data/cache/' + df.name + '.pkl')
+            df.to_pickle('./cache/dataframes/' + df.name + '.pkl')
             self.list_of_pandas[df.name] = df
 
     def remove_pandas(self, df):
-            os.remove('./data/cache/' + df.name + '.pkl')
-            del self.list_of_pandas[df.name]
+        os.remove('./cache/dataframes/' + df.name + '.pkl')
+        del self.list_of_pandas[df.name]
 
     def load_pandas(self):
-        files = Path('./data/cache/').glob('*.pkl')
+        files = Path('./cache/dataframes/').glob('*.pkl')
 
         for file in files:
             df = pd.read_pickle(str(file))
