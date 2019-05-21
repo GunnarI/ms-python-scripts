@@ -1,4 +1,5 @@
 import os
+import warnings
 
 import matplotlib.pyplot as plt
 from pathlib import Path
@@ -26,12 +27,13 @@ class ANN:
             self.test_dataset = pd.DataFrame()
             self.prepare_data()
             self.models = {}
+            self.model_histories = {}
         else:
             if load_from_cache is None:
                 cached_folders = Path('./cache/').glob('[0-9]*?*')
                 newest_cache = 0
                 for folder in cached_folders:
-                    folder_time_stamp = folder.stem.split(' ')[0]
+                    folder_time_stamp = int(folder.stem.split(' ')[0])
                     if folder_time_stamp > newest_cache:
                         newest_cache = folder_time_stamp
                         load_from_cache = folder.stem
@@ -40,6 +42,7 @@ class ANN:
             if os.path.exists(self.cache_path):
                 self.load_datasets()
                 self.models = {}
+                self.model_histories = {}
                 self.load_models()
             else:
                 raise ValueError('A cache path for ' + load_from_cache + ' was not found')
@@ -93,29 +96,28 @@ class ANN:
                                                             norm_emg=True, norm_torque=True)
             self.train_dataset = filt.min_max_normalize_data(self.train_dataset, norm_emg=True, norm_torque=True)
 
-    def train_mlp(self, optimizer='rmsprop', model_name='mlp'):
+    def train_mlp(self, optimizer='rmsprop', model_name='mlp', layers_nodes=None, epochs=1000, val_split=0.2,
+                  early_stop_patience=None):
         train_dataset = self.train_dataset.copy()
-        test_dataset = self.test_dataset.copy()
         if 'Time' in train_dataset.columns:
             train_dataset.pop('Time')
         if 'Trial' in train_dataset.columns:
             train_dataset.pop('Trial')
-        if 'Time' in test_dataset.columns:
-            test_dataset.pop('Time')
-        if 'Trial' in test_dataset.columns:
-            test_dataset.pop('Trial')
 
         train_labels = train_dataset.pop('Torque')
-        test_labels = test_dataset.pop('Torque')
 
-        model = keras.Sequential([
-            layers.Dense(64, activation=tf.nn.relu, input_shape=[len(train_dataset.keys())]),
-            layers.Dense(64, activation=tf.nn.relu),
-            layers.Dense(1)
-        ])
+        if layers_nodes is None:
+            layers_nodes = [(64, 'relu'), (64, 'relu')]
 
-        # optimizer = tf.keras.optimizers.RMSprop()
-        # optimizer = tf.keras.optimizers.Adam()
+        model = keras.Sequential()
+        model.add(layers.Dense(layers_nodes[0][0], input_shape=[len(train_dataset.keys())]))
+        model.add(layers.Activation(layers_nodes[0][1]))
+        for layer in layers_nodes[1:]:
+            model.add(layers.Dense(layer[0]))
+            model.add(layers.Activation(layer[1]))
+
+        model.add(layers.Dense(1))
+
         if optimizer == 'rmsprop':
             optimizer = optimizers.RMSprop()
         elif optimizer == 'adam':
@@ -125,20 +127,37 @@ class ANN:
                       optimizer=optimizer,
                       metrics=['mean_absolute_error', 'mean_squared_error'])
 
-        early_stop = keras.callbacks.EarlyStopping(monitor='val_loss', patience=100)
+        callbacks = []
+        if early_stop_patience is not None:
+            if not isinstance(early_stop_patience, int):
+                warnings.warn('The val_patience should be an integer representing epoch patience of early stopping')
+            else:
+                callbacks.append(keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop_patience))
 
+        callbacks.append(keras.callbacks.CSVLogger(self.cache_path + 'history/' + model_name + '.log',
+                                                   separator=',', append=False))
         history = model.fit(
             train_dataset, train_labels,
-            epochs=1000, validation_split=0.2, verbose=1,
-            callbacks=[early_stop])
+            epochs=epochs, validation_split=val_split, verbose=1,
+            callbacks=callbacks)
 
         self.save_model(model, model_name)
 
-        plot_history(history)
+    def evaluate_model(self, model_name):
+        test_dataset = self.test_dataset.copy()
+        if 'Time' in test_dataset.columns:
+            test_dataset.pop('Time')
+        if 'Trial' in test_dataset.columns:
+            test_dataset.pop('Trial')
 
-        loss, mae, mse = model.evaluate(test_dataset, test_labels, verbose=0)
+        test_labels = test_dataset.pop('Torque')
 
-        print("Testing set knee torque Mean Abs Error: {:5.2f} Nmm".format(mae))
+        plot_history(self.model_histories[model_name])
+
+        loss, mae, mse = self.models[model_name].evaluate(test_dataset, test_labels, verbose=0)
+        print("Testing set knee torque Loss: {:5.4f}\n"
+              "\t\t\t\t\t\tMean Abs Error: {:5.4f}\n"
+              "\t\t\t\t\t\tMean Square Error: {:5.4f}".format(loss, mae, mse))
 
     def create_cache_dir(self, spec_cache_code=None):
         if spec_cache_code is None:
@@ -149,6 +168,7 @@ class ANN:
             os.mkdir(self.cache_path)
             os.mkdir(self.cache_path + 'models/')
             os.mkdir(self.cache_path + 'dataframes/')
+            os.mkdir(self.cache_path + 'history/')
         except FileExistsError:
             print('Cache directory ', self.cache_path, ' already exists')
 
@@ -165,13 +185,20 @@ class ANN:
     def save_model(self, model, model_name):
         model.save(self.cache_path + 'models/' + model_name + '.h5')
         self.models[model_name] = model
+        self.model_histories[model_name] = pd.read_csv(self.cache_path + 'history/' + model_name + '.log',
+                                                       sep=',',
+                                                       engine='python')
 
     def load_models(self):
         models_paths = Path(self.cache_path + 'models/').glob('*.h5')
         for model_path in models_paths:
             self.models[model_path.stem] = load_model(str(model_path))
 
-    def plot_test(self, model_name, cycle_to_plot='random'):
+        history_paths = Path(self.cache_path + 'history/').glob('*.log')
+        for history_path in history_paths:
+            self.model_histories[history_path.stem] = pd.read_csv(str(history_path), sep=',', engine='python')
+
+    def plot_test(self, model_name, cycle_to_plot='random', title=None, save_fig_as=None):
         if cycle_to_plot == 'random':
             cycle_to_plot = self.test_dataset.sample(n=1).Trial.to_string(index=False).strip()
         test_cycle = self.test_dataset[self.test_dataset.Trial == cycle_to_plot]
@@ -179,8 +206,23 @@ class ANN:
         test_torque = test_cycle.pop('Torque')
         test_trial = test_cycle.pop('Trial')
         test_prediction = self.models[model_name].predict(test_cycle)
-        plt.figure()
-        plt.plot(test_time, test_torque, test_time, test_prediction)
+
+        if title is None:
+            title = cycle_to_plot
+        fig = plt.figure(figsize=(8, 5))
+        ax1 = plt.subplot()
+        fig.add_subplot(ax1)
+        ax1.set_title(title)
+        ax1.set_xlabel('gait cycle duration[s]')
+        ax1.set_ylabel('normalized joint moment')
+        ax1.plot(test_time, test_torque, label='Test cycle')
+        ax1.plot(test_time, test_prediction, label='Prediction')
+        ax1.legend()
+
+        if save_fig_as is None:
+            fig.show()
+        else:
+            fig.savefig('./figures/ann/' + save_fig_as + '.png', bbox_inches='tight')
 
 
 def split_trials_by_duration(df, time_lim=None):
@@ -200,10 +242,7 @@ def split_trials_by_duration(df, time_lim=None):
     return slow_walk, normal_walk, fast_walk
 
 
-def plot_history(history):
-    hist = pd.DataFrame(history.history)
-    hist['epoch'] = history.epoch
-
+def plot_history(hist):
     plt.figure()
     plt.xlabel('Epoch')
     plt.ylabel('Mean Abs Error [MPG]')
