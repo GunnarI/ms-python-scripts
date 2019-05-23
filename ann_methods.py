@@ -33,7 +33,7 @@ class ANN:
                 cached_folders = Path('./cache/').glob('[0-9]*?*')
                 newest_cache = 0
                 for folder in cached_folders:
-                    folder_time_stamp = int(folder.stem.split(' ')[0])
+                    folder_time_stamp = int(folder.stem.split('_')[0])
                     if folder_time_stamp > newest_cache:
                         newest_cache = folder_time_stamp
                         load_from_cache = folder.stem
@@ -96,8 +96,8 @@ class ANN:
                                                             norm_emg=True, norm_torque=True)
             self.train_dataset = filt.min_max_normalize_data(self.train_dataset, norm_emg=True, norm_torque=True)
 
-    def train_mlp(self, optimizer='rmsprop', model_name='mlp', layers_nodes=None, epochs=1000, val_split=0.2,
-                  early_stop_patience=None):
+    def train_rnn_w_teacher_forcing(self, optimizer='rmsprop', model_name='mlp', layers_nodes=None, epochs=1000,
+                                    val_split=0.2, early_stop_patience=None, dropout_rates=None):
         train_dataset = self.train_dataset.copy()
         if 'Time' in train_dataset.columns:
             train_dataset.pop('Time')
@@ -105,16 +105,25 @@ class ANN:
             train_dataset.pop('Trial')
 
         train_labels = train_dataset.pop('Torque')
+        train_dataset['TeachForce'] = pd.Series(np.roll(train_labels.values, 1, axis=0))
 
         if layers_nodes is None:
             layers_nodes = [(64, 'relu'), (64, 'relu')]
 
+        if len(dropout_rates) != len(layers_nodes):
+            warnings.warn('Number of dropout rates did not match layers and is thus excluded from the model')
+            dropout_rates = None
+
         model = keras.Sequential()
         model.add(layers.Dense(layers_nodes[0][0], input_shape=[len(train_dataset.keys())]))
         model.add(layers.Activation(layers_nodes[0][1]))
-        for layer in layers_nodes[1:]:
+        if dropout_rates is not None:
+            model.add(layers.Dropout(dropout_rates[0]))
+        for i, layer in enumerate(layers_nodes[1:]):
             model.add(layers.Dense(layer[0]))
             model.add(layers.Activation(layer[1]))
+            if dropout_rates is not None:
+                model.add(layers.Dropout(dropout_rates[i+1]))
 
         model.add(layers.Dense(1))
 
@@ -136,14 +145,154 @@ class ANN:
 
         callbacks.append(keras.callbacks.CSVLogger(self.cache_path + 'history/' + model_name + '.log',
                                                    separator=',', append=False))
-        history = model.fit(
+        model.fit(
+            train_dataset, train_labels, shuffle=False,
+            epochs=epochs, validation_split=val_split, verbose=1,
+            callbacks=callbacks)
+
+        self.save_model(model, model_name)
+
+    def train_lstm(self, optimizer='rmsprop', model_name='lstm', num_nodes=32, epochs=50, val_split=0.2,
+                   early_stop_patience=None, dropout_rate=0.3, look_back=1, activation_func='tanh'):
+        train_dataset = self.train_dataset.copy()
+        if 'Time' in train_dataset.columns:
+            train_dataset.pop('Time')
+
+        num_features = len(train_dataset.columns) - 2
+
+        model = keras.Sequential()
+        model.add(layers.LSTM(num_nodes, return_sequences=True, input_shape=(None, num_features),
+                              activation=activation_func, dropout=dropout_rate))
+        model.add(layers.TimeDistributed(layers.Dense(1)))
+
+        if optimizer == 'rmsprop':
+            optimizer = optimizers.RMSprop()
+        elif optimizer == 'adam':
+            optimizer = optimizers.Adam()
+
+        model.compile(loss='mean_squared_error',
+                      optimizer=optimizer,
+                      metrics=['mean_absolute_error', 'mean_squared_error'])
+
+        callbacks = []
+        if early_stop_patience is not None:
+            if not isinstance(early_stop_patience, int):
+                warnings.warn('The val_patience should be an integer representing epoch patience of early stopping')
+            else:
+                callbacks.append(keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop_patience))
+
+        callbacks.append(keras.callbacks.CSVLogger(self.cache_path + 'history/' + model_name + '.log',
+                                                   separator=',', append=False))
+        callbacks.append(keras.callbacks.TensorBoard(log_dir=self.cache_path + 'tensorboard/' + model_name))
+
+        trial_groups = train_dataset.groupby('Trial')
+        group_num = np.arange(trial_groups.ngroups)
+        np.random.shuffle(group_num)
+
+        train_set = train_dataset[
+            trial_groups.ngroup().isin(group_num[:np.floor((1-val_split) * len(group_num) - 1).astype('int')])
+        ]
+
+        train_set = [df for _, df in train_set.groupby('Trial')]
+        drop_df = pd.concat(train_set)
+        validation_set = train_dataset.drop(drop_df.index)
+        validation_set = [df for _, df in validation_set.groupby('Trial')]
+        # train_group_list = list(train_dataset.groupby('Trial').groups.keys())
+
+        def train_generator():
+            i = 0
+            while True:
+                dataset = train_set[i].copy()
+                dataset.pop('Trial')
+                train_labels = dataset.pop('Torque')
+                x_train = np.array([dataset.values])
+                y_train = np.zeros((1, len(train_labels), 1))
+                y_train[0, :, 0] = train_labels.values
+
+                yield x_train, y_train
+
+        def val_generator():
+            j = 0
+            while True:
+                dataset = validation_set[j].copy()
+                dataset.pop('Trial')
+                validation_labels = dataset.pop('Torque')
+                x_train = np.array([dataset.values])
+                y_train = np.zeros((1, len(validation_labels), 1))
+                y_train[0, :, 0] = validation_labels.values
+
+                yield x_train, y_train
+
+        model.fit_generator(train_generator(), steps_per_epoch=len(train_set), epochs=epochs, verbose=1,
+                            validation_data=val_generator(), validation_steps=len(validation_set), callbacks=callbacks)
+        # model.fit(
+        #     train_dataset, train_labels,
+        #     batch_size=1, epochs=epochs, validation_split=val_split, verbose=1,
+        #     callbacks=callbacks)
+
+        self.save_model(model, model_name)
+
+    def train_mlp(self, optimizer='rmsprop', model_name='mlp', layers_nodes=None, epochs=1000, val_split=0.2,
+                  early_stop_patience=None, dropout_rates=None):
+        train_dataset = self.train_dataset.copy()
+        if 'Time' in train_dataset.columns:
+            train_dataset.pop('Time')
+        if 'Trial' in train_dataset.columns:
+            train_dataset.pop('Trial')
+
+        train_labels = train_dataset.pop('Torque')
+
+        if layers_nodes is None:
+            layers_nodes = [(64, 'relu'), (64, 'relu')]
+
+        if len(dropout_rates) != len(layers_nodes):
+            warnings.warn('Number of dropout rates did not match layers and is thus excluded from the model')
+            dropout_rates = None
+
+        model = keras.Sequential()
+        model.add(layers.Dense(layers_nodes[0][0], input_shape=[len(train_dataset.keys())], name='MLP_Input_Layer'))
+        model.add(layers.Activation(layers_nodes[0][1]))
+        if dropout_rates is not None:
+            model.add(layers.Dropout(dropout_rates[0]))
+        for i, layer in enumerate(layers_nodes[1:]):
+            model.add(layers.Dense(layer[0], name='Hidden_layer_' + str(i+1)))
+            model.add(layers.Activation(layer[1]))
+            if dropout_rates is not None:
+                model.add(layers.Dropout(dropout_rates[i+1]))
+
+        model.add(layers.Dense(1, name='MLP_Moment_Output'))
+
+        if optimizer == 'rmsprop':
+            optimizer = optimizers.RMSprop()
+        elif optimizer == 'adam':
+            optimizer = optimizers.Adam()
+
+        model.compile(loss='mean_squared_error',
+                      optimizer=optimizer,
+                      metrics=['mean_absolute_error', 'mean_squared_error'])
+
+        callbacks = []
+        if early_stop_patience is not None:
+            if not isinstance(early_stop_patience, int):
+                warnings.warn('The val_patience should be an integer representing epoch patience of early stopping')
+            else:
+                callbacks.append(keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop_patience))
+
+        callbacks.append(keras.callbacks.CSVLogger(self.cache_path + 'history/' + model_name + '.log',
+                                                   separator=',', append=False))
+        callbacks.append(keras.callbacks.TensorBoard(log_dir=self.cache_path + 'tensorboard/' + model_name,
+                                                     embeddings_layer_names=['MLP_Input_Layer', 'Hidden_layer_1',
+                                                                             'MLP_Moment_Output'],
+                                                     write_graph=True))
+
+        model.fit(
             train_dataset, train_labels,
             epochs=epochs, validation_split=val_split, verbose=1,
             callbacks=callbacks)
 
         self.save_model(model, model_name)
 
-    def evaluate_model(self, model_name):
+    def evaluate_model(self, model_name, lstm=False):
         test_dataset = self.test_dataset.copy()
         if 'Time' in test_dataset.columns:
             test_dataset.pop('Time')
@@ -154,6 +303,12 @@ class ANN:
 
         plot_history(self.model_histories[model_name])
 
+        if lstm:
+            test_dataset = np.array([test_dataset.values])
+            y = np.zeros((1, len(test_labels), 1))
+            y[0, :, 0] = test_labels.values
+            test_labels = y
+
         loss, mae, mse = self.models[model_name].evaluate(test_dataset, test_labels, verbose=0)
         print("Testing set knee torque Loss: {:5.4f}\n"
               "\t\t\t\t\t\tMean Abs Error: {:5.4f}\n"
@@ -163,7 +318,7 @@ class ANN:
         if spec_cache_code is None:
             self.cache_path = './cache/' + time.strftime('%Y%m%d%H%M') + '/'
         else:
-            self.cache_path = './cache/' + time.strftime('%Y%m%d%H%M') + ' ' + spec_cache_code + '/'
+            self.cache_path = './cache/' + time.strftime('%Y%m%d%H%M') + '_' + spec_cache_code + '/'
         try:
             os.mkdir(self.cache_path)
             os.mkdir(self.cache_path + 'models/')
@@ -196,16 +351,27 @@ class ANN:
 
         history_paths = Path(self.cache_path + 'history/').glob('*.log')
         for history_path in history_paths:
-            self.model_histories[history_path.stem] = pd.read_csv(str(history_path), sep=',', engine='python')
+            try:
+                self.model_histories[history_path.stem] = pd.read_csv(str(history_path), sep=',', engine='python')
+            except pd.errors.EmptyDataError:
+                print('Logger: ', history_path.stem, ' is empty')
+                continue
 
-    def plot_test(self, model_name, cycle_to_plot='random', title=None, save_fig_as=None):
+    def plot_test(self, model_name, cycle_to_plot='random', lstm=False, title=None, save_fig_as=None):
         if cycle_to_plot == 'random':
             cycle_to_plot = self.test_dataset.sample(n=1).Trial.to_string(index=False).strip()
         test_cycle = self.test_dataset[self.test_dataset.Trial == cycle_to_plot]
         test_time = test_cycle.pop('Time')
         test_torque = test_cycle.pop('Torque')
         test_trial = test_cycle.pop('Trial')
+
+        if lstm:
+            test_cycle = np.array([test_cycle.values])
+
         test_prediction = self.models[model_name].predict(test_cycle)
+
+        if lstm:
+            test_prediction = test_prediction[0, :, 0]
 
         if title is None:
             title = cycle_to_plot
@@ -217,6 +383,32 @@ class ANN:
         ax1.set_ylabel('normalized joint moment')
         ax1.plot(test_time, test_torque, label='Test cycle')
         ax1.plot(test_time, test_prediction, label='Prediction')
+        ax1.legend()
+
+        if save_fig_as is None:
+            fig.show()
+        else:
+            fig.savefig('./figures/ann/' + save_fig_as + '.png', bbox_inches='tight')
+
+    def plot_train(self, model_name, cycle_to_plot='random', title=None, save_fig_as=None):
+        if cycle_to_plot == 'random':
+            cycle_to_plot = self.train_dataset.sample(n=1).Trial.to_string(index=False).strip()
+        train_cycle = self.train_dataset[self.train_dataset.Trial == cycle_to_plot]
+        train_time = train_cycle.pop('Time')
+        train_torque = train_cycle.pop('Torque')
+        train_trial = train_cycle.pop('Trial')
+        train_prediction = self.models[model_name].predict(train_cycle)
+
+        if title is None:
+            title = cycle_to_plot
+        fig = plt.figure(figsize=(8, 5))
+        ax1 = plt.subplot()
+        fig.add_subplot(ax1)
+        ax1.set_title(title)
+        ax1.set_xlabel('gait cycle duration[s]')
+        ax1.set_ylabel('normalized joint moment')
+        ax1.plot(train_time, train_torque, label='Test cycle')
+        ax1.plot(train_time, train_prediction, label='Prediction')
         ax1.legend()
 
         if save_fig_as is None:
