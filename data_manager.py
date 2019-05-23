@@ -116,7 +116,7 @@ class DataManager:
                                             df_to_add = self.filt_data_dict[session_trial_id + cycle].copy()
                                             df_to_add['Time'] = (
                                                     df_to_add['Time'] - gait_cycles[cycle]['Start']).round(decimals=2)
-                                            df_to_add['Trial'] = trial['TrialID'] + cycle
+                                            df_to_add['Trial'] = session_id + trial['TrialID'] + cycle
 
                                             if session_id + ' ' + subject_id + ' filtered' \
                                                     not in self.filt_concat_data_dict:
@@ -163,12 +163,12 @@ class DataManager:
             for cycle in gait_cycle_dict:
                 df_to_add = self.filt_data_dict[key + cycle].copy()
                 df_to_add['Time'] = (df_to_add['Time'] - gait_cycle_dict[cycle]['Start']).round(decimals=2)
-                df_to_add['Trial'] = ids[2] + cycle
+                df_to_add['Trial'] = ids[0] + ids[2] + cycle
 
                 if ids[0] + ' ' + ids[1] + ' filtered' not in self.filt_concat_data_dict:
                     self.filt_concat_data_dict[ids[0] + ' ' + ids[1] + ' filtered'] = df_to_add
                 elif not self.filt_concat_data_dict[ids[0] + ' ' + ids[1] + ' filtered']['Trial'] \
-                        .str.contains(ids[2] + cycle).any():
+                        .str.contains(ids[0] + ids[2] + cycle).any():
                     self.filt_concat_data_dict[ids[0] + ' ' + ids[1] + ' filtered'] = pd.concat(
                         [self.filt_concat_data_dict[ids[0] + ' ' + ids[1] + ' filtered'], df_to_add], ignore_index=True)
 
@@ -179,7 +179,7 @@ class DataManager:
 
     def add_pandas(self, df, name):
         if name in self.list_of_pandas.keys():
-            warnings.warn('A dataframe with this name already exists')
+            warnings.warn('A dataframe with the name ' + name + ' already exists')
             return
 
         df.name = name
@@ -189,7 +189,7 @@ class DataManager:
     def update_pandas(self, df, rename=None):
         if df.name not in self.list_of_pandas.keys():
             self.add_pandas(df, df.name)
-            warnings.warn('This dataframe did not exists, used add_pandas(df, name) instead')
+            warnings.warn('The dataframe ' + df.name + ' did not exists, used add_pandas(df, name) instead')
             return
 
         if rename is not None:
@@ -440,7 +440,7 @@ def get_gait_cycles(file):
         for i in range(len(right_fp_time)):
             items_before_fp_max, = np.where(gait_cycles_time < right_fp_time[i])
             items_after_fp_max, = np.where(gait_cycles_time > right_fp_time[i])
-            if items_before_fp_max.size > 0 and items_after_fp_max.size > 0:
+            if items_before_fp_max.size > 0 and items_after_fp_max.size > 1:
                 faulty_cycle = not (
                         gait_cycles_name[items_before_fp_max[items_before_fp_max.size-1]] == 'Foot Strike' and
                         gait_cycles_name[items_after_fp_max[0]] == 'Foot Off' and
@@ -460,7 +460,37 @@ def get_gait_cycles(file):
 
         assert (len(right_fp_time)-faulty_cycle_num > 0), 'All right foot cycles defective in: ' + file
 
-        t1 = gait_cycle_dict['Cycle1']['Start']
-        t2 = gait_cycle_dict['Cycle' + str(len(right_fp_time)-faulty_cycle_num)]['End']
+        while 'Devices' not in row:
+            row = next(reader)
+        fs = float(next(reader)[0])
+
+        while 'Frame' not in row:
+            row = next(reader)
+
+        next(reader)
+        row = next(reader)
+        first_frame = ((float(row[0]) * 10) + float(row[1])) / fs
+
+        while len(row) > 1:
+            frame = row[0]
+            sub_frame = row[1]
+            row = next(reader)
+
+        last_frame = ((float(frame) * 10) + float(sub_frame)) / fs
+
+        t1 = 1000.0
+        t2 = 0.0
+        for cycle in gait_cycle_dict:
+            if gait_cycle_dict[cycle]['Start'] < first_frame or gait_cycle_dict[cycle]['End'] > last_frame:
+                gait_cycle_dict.pop(cycle)
+            else:
+                if gait_cycle_dict[cycle]['Start'] < t1:
+                    t1 = gait_cycle_dict[cycle]['Start']
+                if gait_cycle_dict[cycle]['End'] > t2:
+                    t2 = gait_cycle_dict[cycle]['End']
+
+        assert gait_cycle_dict, 'No good right foot cycles in time range in file: ' + file
+        # t1 = gait_cycle_dict['Cycle1']['Start']
+        # t2 = gait_cycle_dict['Cycle' + str(len(right_fp_time)-faulty_cycle_num)]['End']
 
     return t1, t2, gait_cycle_dict
