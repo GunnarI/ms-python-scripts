@@ -4,6 +4,7 @@ import warnings
 import matplotlib.pyplot as plt
 from pathlib import Path
 import pickle
+import json
 import time
 import pandas as pd
 import numpy as np
@@ -292,6 +293,67 @@ class ANN:
 
         self.save_model(model, model_name)
 
+    def train_ann(self, model_type='mlp', optimizer='rmsprop', model_name='mlp', epochs=100,
+                  val_split=0.2, early_stop_patience=None, dropout_rates=None, **kwargs):
+        """
+
+        :param model_type: Can be 'mlp', 'lstm', default: 'mlp'.
+        :param optimizer:
+        :param model_name:
+        :param epochs:
+        :param val_split:
+        :param early_stop_patience:
+        :param dropout_rates:
+        :param kwargs:
+        :return:
+        """
+
+        train_dataset = self.train_dataset.copy()
+        if 'Time' in train_dataset.columns:
+            train_dataset.pop('Time')
+        if 'Trial' in train_dataset.columns:
+            train_dataset.pop('Trial')
+
+        train_labels = train_dataset.pop('Torque')
+
+        model_param = {'dropout_rates': dropout_rates,
+                       **kwargs}
+
+        model = get_model(model_type, model_param)
+
+        if optimizer == 'rmsprop':
+            optimizer_obj = tf.train.RMSPropOptimizer(learning_rate=0.001, decay=0.9)
+        elif optimizer == 'adam':
+            optimizer_obj = tf.train.AdamOptimizer(learning_rate=0.001, beta1=0.9, beta2=0.999)
+
+        model_compile_param = {'loss': 'mean_squared_error',
+                               #'optimizer': optimizer,
+                               'metrics': ['mean_absolute_error', 'mean_squared_error']}
+        model.compile(optimizer=optimizer_obj, **model_compile_param)
+        model_compile_param['optimizer'] = optimizer
+
+        callbacks = []
+        if early_stop_patience is not None:
+            if not isinstance(early_stop_patience, int):
+                warnings.warn('The val_patience should be an integer representing epoch patience of early stopping')
+            else:
+                callbacks.append(keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop_patience))
+
+        callbacks.append(keras.callbacks.CSVLogger(self.cache_path + 'history/' + model_name + '.log',
+                                                   separator=',', append=False))
+        callbacks.append(keras.callbacks.TensorBoard(log_dir=self.cache_path + 'tensorboard/' + model_name,
+                                                     write_graph=True))
+        # The below callback can be used to save the model weights throughout the process
+        # callbacks.append(keras.callbacks.ModelCheckpoint(self.cache_path + 'models/' + model_name + '.h5',
+        #                                                  verbose=1))
+
+        model.fit(
+            train_dataset.values, train_labels.values,
+            epochs=epochs, validation_split=val_split, verbose=1,
+            callbacks=callbacks)
+
+        self.save_model(model, model_name, model_type, model_param, model_compile_param)
+
     def evaluate_model(self, model_name, lstm=False):
         test_dataset = self.test_dataset.copy()
         if 'Time' in test_dataset.columns:
@@ -337,17 +399,47 @@ class ANN:
         self.train_dataset = pd.read_pickle(self.cache_path + 'dataframes/train_dataset.pkl')
         self.test_dataset = pd.read_pickle(self.cache_path + 'dataframes/test_dataset.pkl')
 
-    def save_model(self, model, model_name):
-        model.save(self.cache_path + 'models/' + model_name + '.h5')
+    def save_model(self, model, model_name, model_type, model_param, model_compile_param):
+        model_param['model_type'] = model_type
+        model.save_weights(self.cache_path + 'models/' + model_name + '_weights', save_format='tf')
+        with open(self.cache_path + 'models/' + model_name + '_param.json', 'w') as file:
+            file.write(json.dumps({'model_param': model_param, 'model_compile_param': model_compile_param}))
+
         self.models[model_name] = model
         self.model_histories[model_name] = pd.read_csv(self.cache_path + 'history/' + model_name + '.log',
                                                        sep=',',
                                                        engine='python')
 
     def load_models(self):
-        models_paths = Path(self.cache_path + 'models/').glob('*.h5')
+        train_dataset = self.train_dataset.copy()
+        if 'Time' in train_dataset.columns:
+            train_dataset.pop('Time')
+        if 'Trial' in train_dataset.columns:
+            train_dataset.pop('Trial')
+        train_labels = train_dataset.pop('Torque')
+
+        models_paths = Path(self.cache_path + 'models/').glob('*_param.json')
         for model_path in models_paths:
-            self.models[model_path.stem] = load_model(str(model_path))
+            with open(str(model_path)) as model_param_file:
+                data = json.load(model_param_file)
+            model_param = data['model_param']
+            model_compile_param = data['model_compile_param']
+            model_type = model_param.pop('model_type')
+
+            model = get_model(model_type, model_param)
+
+            optimizer = model_compile_param.pop('optimizer')
+            if optimizer == 'rmsprop':
+                optimizer_obj = tf.train.RMSPropOptimizer(learning_rate=0.001, decay=0.9)
+            elif optimizer == 'adam':
+                optimizer_obj = tf.train.AdamOptimizer(learning_rate=0.001, beta1=0.9, beta2=0.999)
+            # TODO: Note, the optimizer state not loaded correctly and thus continuing training would not work
+            model.compile(optimizer=optimizer_obj, **model_compile_param)
+
+            model.train_on_batch(train_dataset.values[:1], train_labels.values[:1])
+            model.load_weights(str(model_path).replace('param.json', 'weights'))
+
+            self.models[model_path.stem.replace('_param', '')] = model
 
         history_paths = Path(self.cache_path + 'history/').glob('*.log')
         for history_path in history_paths:
@@ -415,6 +507,72 @@ class ANN:
             fig.show()
         else:
             fig.savefig('./figures/ann/' + save_fig_as + '.png', bbox_inches='tight')
+
+
+class MLPModel(tf.keras.Model):
+
+    def __init__(self, num_classes=1, model_name='mlp', num_nodes=None, dropout_rates=None, **kwargs):
+        super(MLPModel, self).__init__(name=model_name)
+        self.num_classes = num_classes
+        self.dense_layers = []
+
+        if num_nodes is None:
+            num_nodes = np.ones(len(kwargs[next(iter(kwargs))])) * 32
+            # num_nodes = [64, 64]
+
+        num_layers = len(num_nodes)
+        if dropout_rates is not None:
+            assert len(dropout_rates) == num_layers, 'Number of dropout rates do not match number of layers'
+
+        allowed_kwargs = {'activation',
+                          'use_bias',
+                          'kernel_initializer',
+                          'bias_initializer',
+                          'kernel_regularizer',
+                          'bias_regularizer',
+                          'activity_regularizer',
+                          'kernel_constraint',
+                          'bias_constraint',
+                          'name',
+                          }
+
+        for kwarg in kwargs:
+            if kwarg not in allowed_kwargs:
+                raise TypeError('Keyword argument not understood:', kwarg)
+
+        list_of_kwargs = make_list_of_kwargs(kwargs, num_layers)
+
+        for i, units in enumerate(num_nodes):
+            self.dense_layers.append(layers.Dense(units, **list_of_kwargs[i]))
+            if dropout_rates is not None:
+                self.dense_layers.append((layers.Dropout(
+                    dropout_rates[i], name='Dropout' + str(i) + '_' + str(dropout_rates[i]))))
+
+        self.dense_layers.append(layers.Dense(num_classes, name='Output_Layer'))
+
+    def call(self, inputs):
+        x = self.dense_layers[0](inputs)
+        for layer in self.dense_layers[1:]:
+            x = layer(x)
+
+        return x
+
+
+def get_model(model_type, model_param):
+    if model_type == 'mlp':
+        return MLPModel(**model_param)
+
+
+def make_list_of_kwargs(kwargs, list_len):
+    list_of_kwargs = [{} for _ in range(list_len)]
+    for kwarg in kwargs:
+        kwarg_list = kwargs.get(kwarg)
+        assert len(kwarg_list) == list_len, 'Keyword argument ' + kwarg + ' does not hold value for each layer!'
+
+        for i, item in enumerate(kwarg_list):
+            list_of_kwargs[i][kwarg] = item
+
+    return list_of_kwargs
 
 
 def split_trials_by_duration(df, time_lim=None):
