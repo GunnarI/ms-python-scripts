@@ -10,18 +10,20 @@ import numpy as np
 
 import tensorflow as tf
 from tensorflow.python import keras
+from tensorflow.python.keras import backend as K
 from tensorflow.python.keras import layers
 from tensorflow.python.keras.models import load_model
 from tensorflow.python.keras import optimizers
 
 import filters as filt
-
+import stat_analysis_functions as saf
 
 class ANN:
-    def __init__(self, dataset=None, spec_cache_code=None, load_from_cache=None):
+    def __init__(self, dataset=None, spec_cache_code=None, load_from_cache=None, load_models=None):
         self.models = {}
         self.model_histories = {}
         self.model_sessions = {}
+        self.model_predictions = {}
         if load_from_cache is None and dataset is not None:
             self.cache_path = ''
             self.create_cache_dir(spec_cache_code)
@@ -42,7 +44,11 @@ class ANN:
             self.cache_path = './cache/' + load_from_cache + '/'
             if os.path.exists(self.cache_path):
                 self.load_datasets()
-                self.load_models()
+                if load_models is None:
+                    self.load_models()
+                else:
+                    for model_name in load_models:
+                        self.load_models(model_name)
             else:
                 raise ValueError('A cache path for ' + load_from_cache + ' was not found')
 
@@ -249,7 +255,7 @@ class ANN:
             warnings.warn('Number of dropout rates did not match layers and is thus excluded from the model')
             dropout_rates = None
 
-        keras.backend.clear_session()
+        K.clear_session()
 
         emg_inputs = keras.Input(shape=(num_emg, ), name='emg')
         x = layers.Dense(layers_nodes[0][0], activation=layers_nodes[0][1], name='dense_1')(emg_inputs)
@@ -296,6 +302,7 @@ class ANN:
 
     def evaluate_model(self, model_name, lstm=False):
         test_dataset = self.test_dataset.copy()
+        moment_avg = test_dataset.groupby('Time')['Torque'].mean()
         if 'Time' in test_dataset.columns:
             test_dataset.pop('Time')
         if 'Trial' in test_dataset.columns:
@@ -312,9 +319,14 @@ class ANN:
             y[0, :, 0] = test_labels.values
             test_labels = y
 
-        keras.backend.set_session(self.model_sessions[model_name])
-        with keras.backend.get_session().graph.as_default():
+        K.set_session(self.model_sessions[model_name])
+        with K.get_session().graph.as_default():
             loss, mae, mse = self.models[model_name].evaluate(x=test_dataset, y=test_labels, verbose=0)
+            if model_name in self.model_predictions:
+                t = np.linspace(0.0, len(moment_avg)/100, len(moment_avg))
+                moment_avg_figure = saf.plot_moment_avg(self.model_predictions[model_name])
+                ax1 = moment_avg_figure.get_axes()[0]
+                ax1.plot(t, moment_avg)
         print("Testing set knee torque Loss: {:5.4f}\n"
               "\t\t\t\t\t\tMean Abs Error: {:5.4f}\n"
               "\t\t\t\t\t\tMean Square Error: {:5.4f}".format(loss, mae, mse))
@@ -342,21 +354,49 @@ class ANN:
         self.train_dataset = pd.read_pickle(self.cache_path + 'dataframes/train_dataset.pkl')
         self.test_dataset = pd.read_pickle(self.cache_path + 'dataframes/test_dataset.pkl')
 
+    def add_model_prediction(self, model_name):
+        if model_name in self.model_sessions and model_name in self.models:
+            test_set = self.test_dataset.copy()
+            prediction_set = self.test_dataset.copy()
+            cycles = list(test_set.groupby('Trial').apply(np.unique).index)
+
+            trials = test_set.pop('Trial')
+            test_set.pop('Torque')
+            test_set.pop('Time')
+
+            K.set_session(self.model_sessions[model_name])
+            with K.get_session().graph.as_default():
+                for cycle in cycles:
+                    prediction_set.loc[prediction_set.Trial == cycle, 'Torque'] = self.models[model_name].predict(
+                        test_set[trials == cycle])[:, 0]
+            self.model_predictions[model_name] = prediction_set
+
+            K.clear_session()
+        else:
+            warnings.warn('Model name ' + model_name + ' not found in existing models or model sessions')
+
     def save_model(self, model, model_name):
-        self.model_sessions[model_name] = keras.backend.get_session()
+        self.model_sessions[model_name] = K.get_session()
         model.save(self.cache_path + 'models/' + model_name + '.h5')
         self.models[model_name] = model
         self.model_histories[model_name] = pd.read_csv(self.cache_path + 'history/' + model_name + '.log',
                                                        sep=',',
                                                        engine='python')
 
-    def load_models(self):
+    def load_models(self, model_name=None):
         models_paths = Path(self.cache_path + 'models/').glob('*.h5')
         for model_path in models_paths:
-            keras.backend.clear_session()
-            self.models[model_path.stem] = load_model(str(model_path))
-            self.model_sessions[model_path.stem] = keras.backend.get_session()
-            keras.backend.clear_session()
+            if model_name is None:
+                K.clear_session()
+                self.models[model_path.stem] = load_model(str(model_path))
+                self.model_sessions[model_path.stem] = K.get_session()
+                K.clear_session()
+            elif model_name == model_path.stem:
+                K.clear_session()
+                self.models[model_path.stem] = load_model(str(model_path))
+                self.model_sessions[model_path.stem] = K.get_session()
+                K.clear_session()
+                break
 
         history_paths = Path(self.cache_path + 'history/').glob('*.log')
         for history_path in history_paths:
@@ -378,8 +418,8 @@ class ANN:
         if lstm:
             test_cycle = np.array([test_cycle.values])
 
-        keras.backend.set_session(self.model_sessions[model_name])
-        with keras.backend.get_session().graph.as_default():
+        K.set_session(self.model_sessions[model_name])
+        with K.get_session().graph.as_default():
             test_prediction = self.models[model_name].predict(test_cycle)
 
         if lstm:
