@@ -9,7 +9,7 @@ import pandas as pd
 import numpy as np
 
 import tensorflow as tf
-from tensorflow import keras
+from tensorflow.python import keras
 from tensorflow.python.keras import layers
 from tensorflow.python.keras.models import load_model
 from tensorflow.python.keras import optimizers
@@ -19,6 +19,9 @@ import filters as filt
 
 class ANN:
     def __init__(self, dataset=None, spec_cache_code=None, load_from_cache=None):
+        self.models = {}
+        self.model_histories = {}
+        self.model_sessions = {}
         if load_from_cache is None and dataset is not None:
             self.cache_path = ''
             self.create_cache_dir(spec_cache_code)
@@ -26,8 +29,6 @@ class ANN:
             self.train_dataset = pd.DataFrame()
             self.test_dataset = pd.DataFrame()
             self.prepare_data()
-            self.models = {}
-            self.model_histories = {}
         else:
             if load_from_cache is None:
                 cached_folders = Path('./cache/').glob('[0-9]*?*')
@@ -41,8 +42,6 @@ class ANN:
             self.cache_path = './cache/' + load_from_cache + '/'
             if os.path.exists(self.cache_path):
                 self.load_datasets()
-                self.models = {}
-                self.model_histories = {}
                 self.load_models()
             else:
                 raise ValueError('A cache path for ' + load_from_cache + ' was not found')
@@ -241,6 +240,7 @@ class ANN:
             train_dataset.pop('Trial')
 
         train_labels = train_dataset.pop('Torque')
+        num_emg = len([x for x in train_dataset.columns if x not in ['Time', 'Torque', 'Trial']])
 
         if layers_nodes is None:
             layers_nodes = [(64, 'relu'), (64, 'relu')]
@@ -249,18 +249,20 @@ class ANN:
             warnings.warn('Number of dropout rates did not match layers and is thus excluded from the model')
             dropout_rates = None
 
-        model = keras.Sequential()
-        model.add(layers.Dense(layers_nodes[0][0], input_shape=[len(train_dataset.keys())], name='MLP_Input_Layer'))
-        model.add(layers.Activation(layers_nodes[0][1]))
-        if dropout_rates is not None:
-            model.add(layers.Dropout(dropout_rates[0]))
-        for i, layer in enumerate(layers_nodes[1:]):
-            model.add(layers.Dense(layer[0], name='Hidden_layer_' + str(i+1)))
-            model.add(layers.Activation(layer[1]))
-            if dropout_rates is not None:
-                model.add(layers.Dropout(dropout_rates[i+1]))
+        keras.backend.clear_session()
 
-        model.add(layers.Dense(1, name='MLP_Moment_Output'))
+        emg_inputs = keras.Input(shape=(num_emg, ), name='emg')
+        x = layers.Dense(layers_nodes[0][0], activation=layers_nodes[0][1], name='dense_1')(emg_inputs)
+        if dropout_rates is not None:
+            x = layers.Dropout(dropout_rates[0], name='dropout_1')(x)
+        for i, layer in enumerate(layers_nodes[1:]):
+            x = layers.Dense(layer[0], activation=layer[1], name='dense_' + str(i + 2))(x)
+            if dropout_rates is not None:
+                x = layers.Dropout(dropout_rates[i], name='dropout_' + str(i + 2))(x)
+
+        prediction = layers.Dense(1, name='mlp_moment_output')(x)
+
+        model = keras.Model(inputs=emg_inputs, outputs=prediction, name=model_name)
 
         if optimizer == 'rmsprop':
             optimizer = optimizers.RMSprop()
@@ -281,9 +283,9 @@ class ANN:
         callbacks.append(keras.callbacks.CSVLogger(self.cache_path + 'history/' + model_name + '.log',
                                                    separator=',', append=False))
         callbacks.append(keras.callbacks.TensorBoard(log_dir=self.cache_path + 'tensorboard/' + model_name,
-                                                     embeddings_layer_names=['MLP_Input_Layer', 'Hidden_layer_1',
-                                                                             'MLP_Moment_Output'],
                                                      write_graph=True))
+        callbacks.append(keras.callbacks.ModelCheckpoint(self.cache_path + 'models/' + model_name + '_best.h5',
+                                                         save_best_only=True))
 
         model.fit(
             train_dataset, train_labels,
@@ -301,7 +303,8 @@ class ANN:
 
         test_labels = test_dataset.pop('Torque')
 
-        plot_history(self.model_histories[model_name])
+        if model_name in self.model_histories.keys():
+            plot_history(self.model_histories[model_name])
 
         if lstm:
             test_dataset = np.array([test_dataset.values])
@@ -309,7 +312,9 @@ class ANN:
             y[0, :, 0] = test_labels.values
             test_labels = y
 
-        loss, mae, mse = self.models[model_name].evaluate(test_dataset, test_labels, verbose=0)
+        keras.backend.set_session(self.model_sessions[model_name])
+        with keras.backend.get_session().graph.as_default():
+            loss, mae, mse = self.models[model_name].evaluate(x=test_dataset, y=test_labels, verbose=0)
         print("Testing set knee torque Loss: {:5.4f}\n"
               "\t\t\t\t\t\tMean Abs Error: {:5.4f}\n"
               "\t\t\t\t\t\tMean Square Error: {:5.4f}".format(loss, mae, mse))
@@ -338,6 +343,7 @@ class ANN:
         self.test_dataset = pd.read_pickle(self.cache_path + 'dataframes/test_dataset.pkl')
 
     def save_model(self, model, model_name):
+        self.model_sessions[model_name] = keras.backend.get_session()
         model.save(self.cache_path + 'models/' + model_name + '.h5')
         self.models[model_name] = model
         self.model_histories[model_name] = pd.read_csv(self.cache_path + 'history/' + model_name + '.log',
@@ -347,7 +353,10 @@ class ANN:
     def load_models(self):
         models_paths = Path(self.cache_path + 'models/').glob('*.h5')
         for model_path in models_paths:
+            keras.backend.clear_session()
             self.models[model_path.stem] = load_model(str(model_path))
+            self.model_sessions[model_path.stem] = keras.backend.get_session()
+            keras.backend.clear_session()
 
         history_paths = Path(self.cache_path + 'history/').glob('*.log')
         for history_path in history_paths:
@@ -358,17 +367,20 @@ class ANN:
                 continue
 
     def plot_test(self, model_name, cycle_to_plot='random', lstm=False, title=None, save_fig_as=None):
+        dataset = self.test_dataset.copy()
         if cycle_to_plot == 'random':
-            cycle_to_plot = self.test_dataset.sample(n=1).Trial.to_string(index=False).strip()
-        test_cycle = self.test_dataset[self.test_dataset.Trial == cycle_to_plot]
+            cycle_to_plot = dataset.sample(n=1).Trial.to_string(index=False).strip()
+        test_cycle = dataset[dataset.Trial == cycle_to_plot]
         test_time = test_cycle.pop('Time')
-        test_torque = test_cycle.pop('Torque')
+        test_labels = test_cycle.pop('Torque')
         test_trial = test_cycle.pop('Trial')
 
         if lstm:
             test_cycle = np.array([test_cycle.values])
 
-        test_prediction = self.models[model_name].predict(test_cycle)
+        keras.backend.set_session(self.model_sessions[model_name])
+        with keras.backend.get_session().graph.as_default():
+            test_prediction = self.models[model_name].predict(test_cycle)
 
         if lstm:
             test_prediction = test_prediction[0, :, 0]
@@ -381,7 +393,7 @@ class ANN:
         ax1.set_title(title)
         ax1.set_xlabel('gait cycle duration[s]')
         ax1.set_ylabel('normalized joint moment')
-        ax1.plot(test_time, test_torque, label='Test cycle')
+        ax1.plot(test_time, test_labels, label='Test cycle')
         ax1.plot(test_time, test_prediction, label='Prediction')
         ax1.legend()
 
@@ -395,7 +407,7 @@ class ANN:
             cycle_to_plot = self.train_dataset.sample(n=1).Trial.to_string(index=False).strip()
         train_cycle = self.train_dataset[self.train_dataset.Trial == cycle_to_plot]
         train_time = train_cycle.pop('Time')
-        train_torque = train_cycle.pop('Torque')
+        train_labels = train_cycle.pop('Torque')
         train_trial = train_cycle.pop('Trial')
         train_prediction = self.models[model_name].predict(train_cycle)
 
@@ -407,7 +419,7 @@ class ANN:
         ax1.set_title(title)
         ax1.set_xlabel('gait cycle duration[s]')
         ax1.set_ylabel('normalized joint moment')
-        ax1.plot(train_time, train_torque, label='Test cycle')
+        ax1.plot(train_time, train_labels, label='Test cycle')
         ax1.plot(train_time, train_prediction, label='Prediction')
         ax1.legend()
 
