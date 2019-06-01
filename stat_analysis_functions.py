@@ -69,6 +69,8 @@ def plot_moment_avg(df, plot_min_med_max=False, title='Knee joint moments', ylab
     else:
         fig.savefig('./figures/' + save_fig_as + '.png', bbox_inches='tight')
 
+    return fig
+
 
 def plot_muscle_average(df, muscle_list=None, plot_min_and_max=False, title='EMG Muscle Activity', save_fig_as=None):
     min_cycle, med_cycle, max_cycle = get_min_med_max_cycles(df)
