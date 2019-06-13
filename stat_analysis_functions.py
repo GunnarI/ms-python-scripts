@@ -1,5 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns
+from scipy.signal import correlate
 
 
 def get_min_med_max_cycles(df):
@@ -31,6 +33,18 @@ def get_muscle_std(df, muscle_list=None):
         muscle_list_std[i] = np.mean(df.groupby('Time')[muscle].std())
 
     return muscle_list_std
+
+
+def plot_muscle_correlations(df, method='pearson', title='Correlation'):
+    muscle_df = df.copy()
+    for column in muscle_df:
+        if column in ['Time', 'Torque', 'Trial']:
+            muscle_df.pop(column)
+
+    correlation_matrix = muscle_df.corr(method=method)
+    plt.figure()
+    plt.title(title)
+    sns.heatmap(correlation_matrix, annot=True, fmt=".2f", vmin=-1, vmax=1)
 
 
 def plot_moment_avg(df, plot_min_med_max=False, title='Knee joint moments', ylabel=r'joint moment $[\frac{N.mm}{kg}]$',
@@ -72,7 +86,8 @@ def plot_moment_avg(df, plot_min_med_max=False, title='Knee joint moments', ylab
     return fig
 
 
-def plot_muscle_average(df, muscle_list=None, plot_min_and_max=False, title='EMG Muscle Activity', save_fig_as=None):
+def plot_muscle_average(df, muscle_list=None, plot_min_and_max=False, title='EMG Muscle Activity',
+                        ylabel='EMG amplitude', xlabel='gait cycle duration [s]', save_fig_as=None):
     min_cycle, med_cycle, max_cycle = get_min_med_max_cycles(df)
 
     if not muscle_list:
@@ -85,7 +100,7 @@ def plot_muscle_average(df, muscle_list=None, plot_min_and_max=False, title='EMG
     fig, axs = plt.subplots(num_plots, 1, sharex=True, figsize=(7, 1.7 * num_plots), squeeze=False)
     fig.subplots_adjust(hspace=0.04)
     fig.suptitle(title)
-    fig.text(0.06, 0.5, 'Normalized amplitude [V/V]', ha='right', va='center', rotation='vertical')
+    fig.text(0.06, 0.5, ylabel, ha='right', va='center', rotation='vertical')
     for i, muscle in enumerate(muscle_list):
         emg_avg = df.groupby('Time')[muscle].mean()
         emg_std = df.groupby('Time')[muscle].std()
@@ -96,7 +111,7 @@ def plot_muscle_average(df, muscle_list=None, plot_min_and_max=False, title='EMG
         axs[i, 0] = plt.subplot(num_plots, 1, i + 1)
         axs[i, 0].fill_between(time_vec, std_range[0], std_range[1], alpha=0.2)
         axs[i, 0].plot(time_vec, emg_avg, label='Average')
-        axs[i, 0].set_xlabel('gait cycle duration [s]')
+        axs[i, 0].set_xlabel(xlabel)
 
         if plot_min_and_max:
             axs[i, 0].plot(df.loc[df['Trial'] == min_cycle[0], 'Time'],
@@ -232,3 +247,17 @@ def plot_moment_derivative(df, plot_trial='average', muscle_list=None):
             for i, muscle in enumerate(muscle_list):
                 emg = df[muscle][selected_trial]
                 ax2.plot(time_vec[:-1], emg.values[:-1])
+
+
+def set_gait_cycle_percentage(df):
+    return_df = df.copy()
+
+    percentage_list = []
+    for _, group in return_df.groupby('Trial'):
+        len_cycle = group.count()['Time']
+        for i in range(len_cycle):
+            percentage_list.append((i/(len_cycle-1))*100)
+
+    return_df['Percentage'] = percentage_list
+
+    return return_df
