@@ -18,8 +18,18 @@ from tensorflow.python.keras import optimizers
 import filters as filt
 import stat_analysis_functions as saf
 
+
 class ANN:
     def __init__(self, dataset=None, spec_cache_code=None, load_from_cache=None, load_models=None):
+        """An instance of ANN class holds
+
+        :param dataset (pandas.DataFrame): Contains all the filtered (but not normalized) data with the pre-defined
+        structure, default None. Not used if ANN session is loaded from cache (see load_from_cache).
+        :param spec_cache_code (str): Descriptive name to append to cache folder name, if None then only the timestamp,
+        when the folder is created, is used. Default None
+        :param load_from_cache:
+        :param load_models:
+        """
         self.models = {}
         self.model_histories = {}
         self.model_sessions = {}
@@ -101,6 +111,15 @@ class ANN:
                                                             norm_emg=True, norm_torque=True)
             self.train_dataset = filt.min_max_normalize_data(self.train_dataset, norm_emg=True, norm_torque=True)
 
+    def get_norm_values(self):
+        dataset_copy = self.dataset.copy()
+        dataset_copy = dataset_copy[dataset_copy.Trial.isin(self.train_dataset.Trial.unique())]
+        dataset_copy.drop(['Time', 'Trial'], axis=1)
+        norm_min_values = dataset_copy.min(axis=0)
+        norm_max_values = dataset_copy.max(axis=0)
+        norm_dict = {'norm_min_values': norm_min_values.to_dict(), 'norm_max_values': norm_max_values.to_dict()}
+        return norm_dict
+
     def train_rnn_w_teacher_forcing(self, optimizer='rmsprop', model_name='mlp', layers_nodes=None, epochs=1000,
                                     val_split=0.2, early_stop_patience=None, dropout_rates=None):
         train_dataset = self.train_dataset.copy()
@@ -157,23 +176,36 @@ class ANN:
 
         self.save_model(model, model_name)
 
-    def train_lstm(self, optimizer='rmsprop', model_name='lstm', num_nodes=32, epochs=50, val_split=0.2,
-                   early_stop_patience=None, dropout_rate=0.3, look_back=1, activation_func='tanh'):
+    def train_lstm(self, optimizer='rmsprop', model_name='lstm', epochs=10, val_split=0.2,
+                   early_stop_patience=None, dropout_rate=0.3, look_back=5, activation_func='tanh'):
         train_dataset = self.train_dataset.copy()
-        if 'Time' in train_dataset.columns:
-            train_dataset.pop('Time')
+        # if 'Time' in train_dataset.columns:
+        #     train_dataset.pop('Time')
+        # if 'Trial' in train_dataset.columns:
+        #     train_dataset.pop('Trial')
+        #
+        # train_labels = train_dataset.pop('Torque')
+        num_emg = len([x for x in train_dataset.columns if x not in ['Time', 'Torque', 'Trial']])
+        train_tuple, validation_tuple = generate_lstm_samples(train_dataset, look_back=look_back, val_split=val_split)
 
-        num_features = len(train_dataset.columns) - 2
+        K.clear_session()
 
-        model = keras.Sequential()
-        model.add(layers.LSTM(num_nodes, return_sequences=True, input_shape=(None, num_features),
-                              activation=activation_func, dropout=dropout_rate))
-        model.add(layers.TimeDistributed(layers.Dense(1)))
+        emg_inputs = keras.Input(shape=(look_back, num_emg), name='emg')
+
+        lstm_layer = layers.LSTM(1, name='lstm_layer')(emg_inputs)
+
+        # model = keras.Sequential()
+        # model.add(layers.LSTM(num_nodes, return_sequences=True, input_shape=(None, num_emg),
+        #                       activation=activation_func, dropout=dropout_rate))
+        # model.add(layers.TimeDistributed(layers.Dense(1)))
+        prediction = layers.Dense(1, name='lstm_moment_output')(lstm_layer)
 
         if optimizer == 'rmsprop':
             optimizer = optimizers.RMSprop()
         elif optimizer == 'adam':
             optimizer = optimizers.Adam()
+
+        model = keras.Model(inputs=emg_inputs, outputs=prediction, name=model_name)
 
         model.compile(loss='mean_squared_error',
                       optimizer=optimizer,
@@ -188,52 +220,59 @@ class ANN:
 
         callbacks.append(keras.callbacks.CSVLogger(self.cache_path + 'history/' + model_name + '.log',
                                                    separator=',', append=False))
-        callbacks.append(keras.callbacks.TensorBoard(log_dir=self.cache_path + 'tensorboard/' + model_name))
+        callbacks.append(keras.callbacks.TensorBoard(log_dir=self.cache_path + 'tensorboard/' + model_name,
+                                                     write_graph=True))
+        callbacks.append(keras.callbacks.ModelCheckpoint(self.cache_path + 'models/' + model_name + '_best.h5',
+                                                         save_best_only=True))
 
-        trial_groups = train_dataset.groupby('Trial')
-        group_num = np.arange(trial_groups.ngroups)
-        np.random.shuffle(group_num)
-
-        train_set = train_dataset[
-            trial_groups.ngroup().isin(group_num[:np.floor((1-val_split) * len(group_num) - 1).astype('int')])
-        ]
-
-        train_set = [df for _, df in train_set.groupby('Trial')]
-        drop_df = pd.concat(train_set)
-        validation_set = train_dataset.drop(drop_df.index)
-        validation_set = [df for _, df in validation_set.groupby('Trial')]
+        # trial_groups = train_dataset.groupby('Trial')
+        # group_num = np.arange(trial_groups.ngroups)
+        # np.random.shuffle(group_num)
+        #
+        # train_set = train_dataset[
+        #     trial_groups.ngroup().isin(group_num[:np.floor((1-val_split) * len(group_num) - 1).astype('int')])
+        # ]
+        #
+        # train_set = [df for _, df in train_set.groupby('Trial')]
+        # drop_df = pd.concat(train_set)
+        # validation_set = train_dataset.drop(drop_df.index)
+        # validation_set = [df for _, df in validation_set.groupby('Trial')]
         # train_group_list = list(train_dataset.groupby('Trial').groups.keys())
 
-        def train_generator():
-            i = 0
-            while True:
-                dataset = train_set[i].copy()
-                dataset.pop('Trial')
-                train_labels = dataset.pop('Torque')
-                x_train = np.array([dataset.values])
-                y_train = np.zeros((1, len(train_labels), 1))
-                y_train[0, :, 0] = train_labels.values
+        # def train_generator():
+        #     i = 0
+        #     while True:
+        #         dataset = train_set[i].copy()
+        #         dataset.pop('Trial')
+        #         train_labels = dataset.pop('Torque')
+        #         x_train = np.array([dataset.values])
+        #         y_train = np.zeros((1, len(train_labels), 1))
+        #         y_train[0, :, 0] = train_labels.values
+        #
+        #         yield x_train, y_train
+        #
+        # def val_generator():
+        #     j = 0
+        #     while True:
+        #         dataset = validation_set[j].copy()
+        #         dataset.pop('Trial')
+        #         validation_labels = dataset.pop('Torque')
+        #         x_train = np.array([dataset.values])
+        #         y_train = np.zeros((1, len(validation_labels), 1))
+        #         y_train[0, :, 0] = validation_labels.values
+        #
+        #         yield x_train, y_train
 
-                yield x_train, y_train
+        # model.fit_generator(train_generator(), steps_per_epoch=len(train_set), epochs=epochs, verbose=1,
+        #                     validation_data=val_generator(), validation_steps=len(validation_set), callbacks=callbacks)
 
-        def val_generator():
-            j = 0
-            while True:
-                dataset = validation_set[j].copy()
-                dataset.pop('Trial')
-                validation_labels = dataset.pop('Torque')
-                x_train = np.array([dataset.values])
-                y_train = np.zeros((1, len(validation_labels), 1))
-                y_train[0, :, 0] = validation_labels.values
-
-                yield x_train, y_train
-
-        model.fit_generator(train_generator(), steps_per_epoch=len(train_set), epochs=epochs, verbose=1,
-                            validation_data=val_generator(), validation_steps=len(validation_set), callbacks=callbacks)
         # model.fit(
         #     train_dataset, train_labels,
         #     batch_size=1, epochs=epochs, validation_split=val_split, verbose=1,
         #     callbacks=callbacks)
+
+        model.fit(train_tuple[1], train_tuple[2], validation_data=(validation_tuple[1], validation_tuple[2]),
+                  epochs=epochs, batch_size=len(train_tuple[1]), verbose=1, callbacks=callbacks)
 
         self.save_model(model, model_name)
 
@@ -416,14 +455,20 @@ class ANN:
         test_trial = test_cycle.pop('Trial')
 
         if lstm:
-            test_cycle = np.array([test_cycle.values])
+            # test_cycle = np.array([test_cycle.values])
+            bla, test_cycle, bla2 = generate_lstm_samples(dataset[dataset.Trial == cycle_to_plot], training=False)
 
         K.set_session(self.model_sessions[model_name])
         with K.get_session().graph.as_default():
-            test_prediction = self.models[model_name].predict(test_cycle)
+            if lstm:
+                # test_prediction = []
+                # for i in range(len(test_cycle)):
+                test_prediction = self.models[model_name].predict(test_cycle, batch_size=len(test_cycle))
+            else:
+                test_prediction = self.models[model_name].predict(test_cycle)
 
-        if lstm:
-            test_prediction = test_prediction[0, :, 0]
+        # if lstm:
+        #     test_prediction = test_prediction[0, :, 0]
 
         if title is None:
             title = cycle_to_plot
@@ -434,7 +479,7 @@ class ANN:
         ax1.set_xlabel('gait cycle duration[s]')
         ax1.set_ylabel('normalized joint moment')
         ax1.plot(test_time, test_labels, label='Test cycle')
-        ax1.plot(test_time, test_prediction, label='Prediction')
+        ax1.plot(test_time[4:], test_prediction, label='Prediction')
         ax1.legend()
 
         if save_fig_as is None:
@@ -484,6 +529,66 @@ def split_trials_by_duration(df, time_lim=None):
     normal_walk = normal_walk.drop(slow_walk.index)
 
     return slow_walk, normal_walk, fast_walk
+
+
+def split_train_val(df, val_split=0.2):
+    train_dataset = df.copy()
+    trial_groups = train_dataset.groupby('Trial')
+    group_num = np.arange(trial_groups.ngroups)
+    np.random.shuffle(group_num)
+
+    train_set = train_dataset[
+        trial_groups.ngroup().isin(group_num[:np.floor((1 - val_split) * len(group_num) - 1).astype('int')])
+    ]
+
+    train_set = [df for _, df in train_set.groupby('Trial')]
+    drop_df = pd.concat(train_set)
+    validation_set = train_dataset.drop(drop_df.index)
+    validation_set = [df for _, df in validation_set.groupby('Trial')]
+
+    return train_set, validation_set
+
+
+def generate_lstm_samples(df, look_back=5, training=True, val_split=0.2):
+    if training:
+        train_set, validation_set = split_train_val(df, val_split=val_split)
+        emg_train_samples = []
+        emg_validation_samples = []
+        torque_train_samples = []
+        torque_validation_samples = []
+
+        for trial_df in train_set:
+            emg_set = trial_df.drop(columns=['Time', 'Trial'], errors='ignore')
+            torque_set = emg_set.pop('Torque')
+            emg_set = emg_set.values
+            for i in range(look_back-1, len(emg_set)):
+                torque_train_samples.append(torque_set.iloc[i])
+                emg_train_samples.append(np.array(emg_set[i-look_back+1:i+1, :]))
+
+        for validation_df in validation_set:
+            emg_set = validation_df.drop(columns=['Time', 'Trial'], errors='ignore')
+            torque_set = emg_set.pop('Torque')
+            emg_set = emg_set.values
+            for i in range(look_back - 1, len(emg_set)):
+                torque_validation_samples.append(torque_set.iloc[i])
+                emg_validation_samples.append(np.array(emg_set[i-look_back+1:i+1, :]))
+
+        return (train_set, np.array(emg_train_samples), np.array(torque_train_samples)), (
+            validation_set, np.array(emg_validation_samples), np.array(torque_validation_samples))
+    else:
+        test_set = [trial_df for _, trial_df in df.groupby('Trial')]
+        emg_test_samples = []
+        torque_test_samples = []
+
+        for trial_df in test_set:
+            emg_set = trial_df.drop(columns=['Time', 'Trial'], errors='ignore')
+            torque_set = emg_set.pop('Torque')
+            emg_set = emg_set.values
+            for i in range(look_back - 1, len(emg_set)):
+                torque_test_samples.append(torque_set.iloc[i])
+                emg_test_samples.append(np.array(emg_set[i - look_back + 1:i + 1, :]))
+
+        return test_set, np.array(emg_test_samples), np.array(torque_test_samples)
 
 
 def plot_history(hist):
