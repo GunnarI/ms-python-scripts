@@ -64,7 +64,7 @@ def min_max_normalize_data(df, secondary_df=None, norm_emg=True, norm_torque=Fal
     :return: Dataframe with normalized values
     """
     return_df = df.copy()
-    col = list(df)
+    col = return_df.columns
     if 'Time' in col:
         time = return_df.pop('Time')
     if 'Torque' in col:
@@ -78,8 +78,18 @@ def min_max_normalize_data(df, secondary_df=None, norm_emg=True, norm_torque=Fal
         if norm_emg:
             emg_scaler = preprocessing.MinMaxScaler(feature_range=(0, 1)).fit(emg)
         if norm_torque:
-            torque_scaler = preprocessing.MinMaxScaler(
-                feature_range=((torque.min()/torque.max()), 1)).fit(torque.values.reshape(-1, 1))
+            min_torque = torque.min()
+            max_torque = torque.max()
+            if np.abs(min_torque) < max_torque:
+                torque_scaler = preprocessing.MinMaxScaler(
+                    feature_range=((min_torque/max_torque), 1)).fit(torque.values.reshape(-1, 1))
+            elif min_torque < 0:
+                torque_scaler = preprocessing.MinMaxScaler(
+                    feature_range=(-1, (max_torque / np.abs(min_torque)))).fit(torque.values.reshape(-1, 1))
+            else:
+                torque_scaler = preprocessing.MinMaxScaler(
+                    feature_range=(min_torque, 1)).fit(torque.values.reshape(-1, 1))
+
     else:
         scaling_df = secondary_df.copy()
 
@@ -95,8 +105,20 @@ def min_max_normalize_data(df, secondary_df=None, norm_emg=True, norm_torque=Fal
         if norm_emg:
             emg_scaler = preprocessing.MinMaxScaler(feature_range=(0, 1)).fit(s_emg)
         if norm_torque:
-            torque_scaler = preprocessing.MinMaxScaler(
-                feature_range=((s_torque.min()/s_torque.max()), 1)).fit(s_torque.values.reshape(-1, 1))
+            min_torque = s_torque.min()
+            max_torque = s_torque.max()
+            if np.abs(min_torque) < max_torque:
+                torque_scaler = preprocessing.MinMaxScaler(
+                    feature_range=((min_torque / max_torque), 1)).fit(s_torque.values.reshape(-1, 1))
+            elif min_torque < 0:
+                torque_scaler = preprocessing.MinMaxScaler(
+                    feature_range=(-1, (max_torque / np.abs(min_torque)))).fit(s_torque.values.reshape(-1, 1))
+            else:
+                torque_scaler = preprocessing.MinMaxScaler(
+                    feature_range=(min_torque, 1)).fit(s_torque.values.reshape(-1, 1))
+
+            # torque_scaler = preprocessing.MinMaxScaler(
+            #     feature_range=((s_torque.min()/s_torque.max()), 1)).fit(s_torque.values.reshape(-1, 1))
 
     if norm_emg:
         return_df = pd.DataFrame(emg_scaler.transform(emg), columns=return_df.columns, index=return_df.index)
@@ -111,6 +133,37 @@ def min_max_normalize_data(df, secondary_df=None, norm_emg=True, norm_torque=Fal
         return_df['Trial'] = trial
 
     return return_df
+
+
+# TODO: Test functionality!
+def real_time_normalize(data, norm_values):
+    if isinstance(data, pd.DataFrame) and isinstance(norm_values, dict):
+        return_df = data.copy()
+        for column in return_df:
+            if column not in ['Time', 'Torque', 'Trial']:
+                return_df[column] = normalize(return_df[column], norm_values['norm_min_values'][column],
+                                         norm_values['norm_max_values'][column])
+            elif column == 'Torque':
+                min_torque = norm_values['norm_min_values'][column]
+                max_torque = norm_values['norm_max_values'][column]
+
+                if np.abs(min_torque) < max_torque:
+                    scale_range = ((min_torque / max_torque), 1)
+                elif min_torque < 0:
+                    scale_range = (-1, (max_torque / np.abs(min_torque)))
+                else:
+                    scale_range = (min_torque, 1)
+
+                return_df[column] = normalize(return_df[column], min_torque, max_torque, scale_range=scale_range)
+
+        return return_df
+
+
+def normalize(feature, min_value, max_value, scale_range=(0, 1)):
+    feature_std = (feature - min_value) / (max_value - min_value)
+    feature_scaled = feature_std * (scale_range[1] - scale_range[0]) + scale_range[0]
+
+    return feature_scaled
 
 # TODO: implement real-time filtering (if time)
 # def filter_emg_rt(channels, low_pass, high_pass, window)
