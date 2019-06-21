@@ -116,65 +116,42 @@ def min_max_normalize_data(df, secondary_df=None, norm_emg=True, norm_torque=Fal
 # def filter_emg_rt(channels, low_pass, high_pass, window)
 
 
-def filter_torque(torque_data_dict, filt_order, lowcut, fs, axis_of_focus=0, cut_time=False, lp_filter=False,
-                  subject_id=None):
-    torque_filt_data_dict = {}
-    headers = {}
-    b, a = butter(filt_order, lowcut, btype='lowpass', fs=fs)
-    for key in torque_data_dict:
-        if subject_id is None or subject_id in key:
-            filtered_torque = np.zeros(shape=(len(torque_data_dict[key]["data"][:, 0]), 2))
-            filtered_torque[:, 0] = torque_data_dict[key]["data"][:, 0]
-            if lp_filter:
-                filtered_torque[:, 1] = lfilter(b, a, torque_data_dict[key]["data"][:, axis_of_focus + 1])
-            else:
-                filtered_torque[:, 1] = torque_data_dict[key]["data"][:, axis_of_focus + 1]
+# TODO: fix all functions so that they do not rely on dictionaries and do not directly handle data management,
+#  eg. storing data in cache
+def filter_emg(emg_df, lowcut, highcut, window, fs, fs_downsample=0):
+    df_copy = emg_df.copy()
 
-            if cut_time and 'walk' in key.lower():
-                t1 = torque_data_dict[key]["t1"]
-                t2 = torque_data_dict[key]["t2"]
-                filtered_torque = filtered_torque[(filtered_torque[:, 0] >= t1) & (filtered_torque[:, 0] <= t2), :]
+    column_names = [col_name for col_name in df_copy.columns if col_name not in ['Trial', 'Torque']]
+    list_of_emg_filtered = []
+    trial_cycle_names = []
+    for group, df in df_copy.groupby('Trial'):
+        t = df.pop('Time')
+        trial = df.pop('Trial')
+        num_emg = df.shape[1]
+        t_short = t_vec_after_ma(window, t.values)
+        if fs_downsample > 0:
+            t_short = np.ceil(t_short[0::fs_downsample] * (fs / fs_downsample)) * (fs_downsample / fs)
+        filtered_emg = np.zeros(shape=(len(t_short), num_emg + 1))
+        filtered_emg[:, 0] = t_short
 
-            torque_filt_data_dict[key + ' filtered'] = filtered_torque
-            headers[key + ' filtered'] = ['Time', 'Torque']
-
-    # Save the filtered torque signals
-    save_np_dict_to_txt(torque_filt_data_dict, './data/labels/', data_fmt='%f', headers=headers)
-
-
-def filter_emg(emg_data_dict, lowcut, highcut, window, fs, cut_time=False, fs_downsample=0, subject_id=None):
-    emg_filt_data_dict = {}
-    emg_headers = {}
-    for key in emg_data_dict:
-        if subject_id is None or subject_id in key:
-            num_emg = len(emg_data_dict[key]["data"][0, :]) - 1
-            t = emg_data_dict[key]["data"][:, 0]
-            t_short = t_vec_after_ma(window, t)
+        for i, column in enumerate(df.values.T):
+            column = noise_filter(column, lowcut, highcut, fs)
+            column = demodulation(column)
+            column, t = smoothing(column, t, window, fs)
+            column = relinearization(column)
             if fs_downsample > 0:
-                t_short = np.ceil(t_short[fs_downsample-1::fs_downsample]*(fs/fs_downsample))*(fs_downsample/fs)
-            filtered_emg = np.zeros(shape=(len(t_short), num_emg + 1))
-            filtered_emg[:, 0] = t_short
-            for i, column in enumerate(emg_data_dict[key]["data"][:, 1:].T):
-                column = noise_filter(column, lowcut, highcut, fs)
-                column = demodulation(column)
-                column, t = smoothing(column, t, window, fs)
-                column = relinearization(column)
-                if fs_downsample > 0:
-                    column = column[0::fs_downsample]
-                filtered_emg[:, i + 1] = column
+                column = column[0::fs_downsample]
+            filtered_emg[:, i + 1] = column
 
-            emg_filt_data_dict[key + ' filtered'] = filtered_emg
+        list_of_emg_filtered.append(filtered_emg)
+        trial_cycle_names.append([str(group)]*len(filtered_emg))
 
-            emg_headers[key + ' filtered'] = emg_data_dict[key]["headers"]
+    emg_filtered_df = pd.DataFrame(data=np.concatenate(list_of_emg_filtered), columns=column_names)
+    emg_filtered_df = emg_filtered_df.assign(Trial=np.concatenate(trial_cycle_names))
+    old_name_split = emg_df.name.split()
+    emg_filtered_df.name = old_name_split[0] + old_name_split[1] + ' filtered'
 
-            if cut_time and 'walk' in key.lower():
-                t1 = emg_data_dict[key]["t1"]
-                t2 = emg_data_dict[key]["t2"]
-                emg_filt_data_dict[key + ' filtered'] = filtered_emg[
-                                                        (filtered_emg[:, 0] >= t1) & (filtered_emg[:, 0] <= t2), :]
-
-    # Save the filtered and normalized emg signals
-    save_np_dict_to_txt(emg_filt_data_dict, './data/', data_fmt='%f', headers=emg_headers)
+    return emg_filtered_df
 
 
 def noise_filter(data, lowcut, highcut, fs, order=5):
