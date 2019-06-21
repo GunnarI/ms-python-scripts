@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
-from scipy.signal import correlate
+from scipy import signal as scisig
 
 
 def get_min_med_max_cycles(df):
@@ -48,33 +48,66 @@ def plot_muscle_correlations(df, method='pearson', title='Correlation'):
 
 
 def plot_moment_avg(df, plot_min_med_max=False, title='Knee joint moments', ylabel=r'joint moment $[\frac{N.mm}{kg}]$',
-                    save_fig_as=None):
-    min_cycle, med_cycle, max_cycle = get_min_med_max_cycles(df)
+                    as_percentage=True, save_fig_as=None):
+    if as_percentage:
+        df_copy = set_gait_cycle_percentage(df)
+    else:
+        df_copy = df.copy()
+    min_cycle, med_cycle, max_cycle = get_min_med_max_cycles(df_copy)
     fig = plt.figure(figsize=(8, 5))
     ax1 = plt.subplot()
     fig.add_subplot(ax1)
 
-    moment_avg = df.groupby('Time')['Torque'].mean()
-    moment_std = df.groupby('Time')['Torque'].std()
-    time_vec = np.arange(0, max_cycle[1]) / 100
+    if as_percentage:
+        trial_groups = [trial for _, trial in df_copy.groupby('Trial')]
+        xvec = np.arange(0, 101)
+        num_steps = len(xvec)
+        moments = np.zeros((len(trial_groups), num_steps))
+        for i, df in enumerate(trial_groups):
+            moments[i, :] = resample_torque(df.Torque, num_steps)
+            if plot_min_med_max:
+                min_cycle_xvec = xvec
+                med_cycle_xvec = xvec
+                max_cycle_xvec = xvec
+
+                if df.iloc[0]['Trial'] == min_cycle[0]:
+                    min_cycle_moments = moments[i, :]
+                elif df.iloc[0]['Trial'] == med_cycle[0]:
+                    med_cycle_moments = moments[i, :]
+                elif df.iloc[0]['Trial'] == max_cycle[0]:
+                    max_cycle_moments = moments[i, :]
+
+        moment_avg = np.mean(moments, axis=0)
+        moment_std = np.std(moments, axis=0)
+    else:
+        moment_avg = df_copy.groupby('Time')['Torque'].mean()
+        moment_std = df_copy.groupby('Time')['Torque'].std()
+        xvec = np.arange(0, max_cycle[1]) / 100
+
+        if plot_min_med_max:
+            min_cycle_xvec = df_copy.loc[df_copy['Trial'] == min_cycle[0], 'Time']
+            med_cycle_xvec = df_copy.loc[df_copy['Trial'] == med_cycle[0], 'Time']
+            max_cycle_xvec = df_copy.loc[df_copy['Trial'] == max_cycle[0], 'Time']
+
+            min_cycle_moments = df_copy.loc[df_copy['Trial'] == min_cycle[0], 'Torque']
+            med_cycle_moments = df_copy.loc[df_copy['Trial'] == med_cycle[0], 'Torque']
+            max_cycle_moments = df_copy.loc[df_copy['Trial'] == max_cycle[0], 'Torque']
 
     std_range = (moment_avg - moment_std, moment_avg + moment_std)
-    std_range[0][np.isnan(std_range[0].values)] = 0
-    std_range[1][np.isnan(std_range[1].values)] = 0
+    if not as_percentage:
+        std_range[0][np.isnan(std_range[0].values)] = 0
+        std_range[1][np.isnan(std_range[1].values)] = 0
 
-    ax1.fill_between(time_vec, std_range[0], std_range[1], alpha=0.2)
-    ax1.plot(time_vec, moment_avg, label='Average')
+    ax1.fill_between(xvec, std_range[0], std_range[1], alpha=0.2)
+    ax1.plot(xvec, moment_avg, label='Average')
     ax1.set_title(title)
     ax1.set_xlabel('gait cycle duration [s]')
     ax1.set_ylabel(ylabel)
 
     if plot_min_med_max:
-        ax1.plot(df.loc[df['Trial'] == min_cycle[0], 'Time'], df.loc[df['Trial'] == min_cycle[0], 'Torque'],
-                 label='Fastest cycle')
-        ax1.plot(df.loc[df['Trial'] == max_cycle[0], 'Time'], df.loc[df['Trial'] == max_cycle[0], 'Torque'],
-                 label='Slowest cycle')
-        ax1.plot(df.loc[df['Trial'] == med_cycle[0], 'Time'], df.loc[df['Trial'] == med_cycle[0], 'Torque'],
-                 label='Median cycle')
+        ax1.plot(min_cycle_xvec, min_cycle_moments, label='Fastest cycle')
+        ax1.plot(med_cycle_xvec, med_cycle_moments, label='Median cycle')
+        ax1.plot(max_cycle_xvec, max_cycle_moments, label='Slowest cycle')
     ax1.legend()
 
     fig.add_subplot(ax1)
@@ -261,3 +294,10 @@ def set_gait_cycle_percentage(df):
     return_df['Percentage'] = percentage_list
 
     return return_df
+
+
+def resample_torque(torque, new_sample_length):
+    if len(torque) == new_sample_length:
+        return torque
+    else:
+        return scisig.resample(torque, new_sample_length)
