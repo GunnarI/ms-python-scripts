@@ -10,6 +10,7 @@ import pandas as pd
 root_dir = './'
 cache_path = root_dir + 'cache/'
 
+
 class DataManager:
     r"""
     The DataManager class contains references to the measured data and offers the possibility to read the relevant data
@@ -74,6 +75,7 @@ class DataManager:
         self.base_dir = base_dir
         self.emg_data_dict = {}
         self.torque_data_dict = {}
+        self.gait_cycles_dict = {}
         self.filt_data_dict = {}
         self.filt_concat_data_dict = {}
         self.list_of_pandas = {}
@@ -106,7 +108,7 @@ class DataManager:
         with open(root_dir + 'data_structure.json', 'w') as ds:
             json.dump(self.data_struct, ds, indent=4)
 
-    def load_emg_and_torque(self, subject_id, session_id, reload=False, load_filt=False):
+    def load_emg_and_torque(self, subject_id, session_id, reload=False):
         """
         Loads the raw emg data either from the original csv file or previously saved txt file.
         If txt file does not already exist then a new one is saved. All emg data (both from csv and txt files) is added
@@ -129,6 +131,7 @@ class DataManager:
                         emg_headers = ['Time']
                         for key in session["EMGProtocol"]:
                             emg_headers.append(session["EMGProtocol"][key])
+                        torque_headers = ['Time', 'MomentX', 'MomentY', 'MomentZ']
 
                         for trial in session["Trials"]:
                             session_trial_id = session_id + ' ' + subject_id + ' ' + trial["TrialID"]
@@ -141,29 +144,37 @@ class DataManager:
                                     warnings.warn(str(error) + "\n\tThe trial was ignored!")
                                     continue
 
+                                # Set gait_cycles_dict
+                                self.gait_cycles_dict[session_trial_id] = {"gait_cycles": gait_cycles,
+                                                                           "t1": t1, "t2": t2}
+
                                 # Load torque data
                                 torque_array_dir = cache_path + 'raw_data/labels/' + session_trial_id + '.txt'
                                 if os.path.isfile(torque_array_dir) and not reload:
-                                    self.torque_data_dict[session_trial_id] = {"data": np.loadtxt(torque_array_dir),
+                                    self.torque_data_dict[session_trial_id] = {"headers": torque_headers,
+                                                                               "data": np.loadtxt(torque_array_dir,
+                                                                                                  skiprows=1),
                                                                                "t1": t1, "t2": t2,
                                                                                "gait_cycles": gait_cycles}
                                 else:
                                     try:
-                                        torque_data = get_torque_from_csv(trial["File"],
-                                                                          subject_id + ':RKneeMoment',
-                                                                          frame_freq)
+                                        torque_data, torque_headers = get_torque_from_csv(trial["File"],
+                                                                                          subject_id + ':RKneeMoment',
+                                                                                          frame_freq)
                                     except AssertionError as error:
                                         warnings.warn(str(error) + "\n\tThe trial was ignored!")
                                         continue
-                                    self.torque_data_dict[session_trial_id] = {"data": torque_data, "t1": t1,
+                                    self.torque_data_dict[session_trial_id] = {"headers": torque_headers,
+                                                                               "data": torque_data, "t1": t1,
                                                                                "t2": t2,
                                                                                "gait_cycles": gait_cycles}
-                                    np.savetxt(torque_array_dir, torque_data, fmt='%f')
+                                    save_raw_data_to_txt(torque_data, torque_array_dir, headers=torque_headers)
 
                                 # Load emg data
                                 if os.path.isfile(emg_array_dir) and not reload:
                                     self.emg_data_dict[session_trial_id] = {"headers": emg_headers,
-                                                                            "data": np.loadtxt(emg_array_dir),
+                                                                            "data": np.loadtxt(emg_array_dir,
+                                                                                               skiprows=1),
                                                                             "t1": t1, "t2": t2,
                                                                             "gait_cycles": gait_cycles}
                                 else:
@@ -172,88 +183,87 @@ class DataManager:
                                     self.emg_data_dict[session_trial_id] = {"headers": emg_headers,
                                                                             "data": emg_data, "t1": t1, "t2": t2,
                                                                             "gait_cycles": gait_cycles}
-                                    np.savetxt(emg_array_dir, emg_data, fmt='%f')
-
-                                # Load filtered data
-                                if load_filt:
-                                    filt_emg_array_dir = cache_path + 'raw_data/input/' + \
-                                                         session_trial_id + ' filtered.txt'
-                                    filt_torque_array_dir = cache_path + 'raw_data/labels/' + \
-                                                            session_trial_id + ' filtered.txt'
-                                    if os.path.isfile(filt_emg_array_dir) and os.path.isfile(filt_torque_array_dir):
-                                        for cycle in gait_cycles:
-                                            pd_emg = pd.read_csv(filt_emg_array_dir, sep=' ').set_index(
-                                                'Time').truncate(
-                                                gait_cycles[cycle]['Start'], gait_cycles[cycle]['End'])
-                                            pd_torque = pd.read_csv(filt_torque_array_dir, sep=' ').set_index(
-                                                'Time').truncate(
-                                                gait_cycles[cycle]['Start'], gait_cycles[cycle]['End'])
-                                            self.filt_data_dict[session_trial_id + cycle] = pd_emg.join(
-                                                pd_torque, how='outer').reset_index()
-
-                                            df_to_add = self.filt_data_dict[session_trial_id + cycle].copy()
-                                            df_to_add['Time'] = (
-                                                    df_to_add['Time'] - gait_cycles[cycle]['Start']).round(decimals=2)
-                                            df_to_add['Trial'] = session_id + trial['TrialID'] + cycle
-
-                                            if session_id + ' ' + subject_id + ' filtered' \
-                                                    not in self.filt_concat_data_dict:
-                                                self.filt_concat_data_dict[
-                                                    session_id + ' ' + subject_id + ' filtered'] = df_to_add
-                                            elif not self.filt_concat_data_dict[
-                                                session_id + ' ' + subject_id + ' filtered'
-                                            ]['Trial'].str.contains(trial['TrialID'] + cycle).any():
-                                                self.filt_concat_data_dict[
-                                                    session_id + ' ' + subject_id + ' filtered'] = pd.concat(
-                                                    [self.filt_concat_data_dict[session_id + ' ' + subject_id +
-                                                                                ' filtered'], df_to_add],
-                                                    ignore_index=True)
+                                    save_raw_data_to_txt(emg_data, emg_array_dir, headers=emg_headers)
                             else:
                                 if os.path.isfile(emg_array_dir) and not reload:
                                     self.emg_data_dict[session_trial_id] = {"headers": emg_headers,
-                                                                            "data": np.loadtxt(emg_array_dir)}
+                                                                            "data": np.loadtxt(emg_array_dir,
+                                                                                               skiprows=1)}
                                 else:
                                     emg_data = get_emg_from_csv(trial["File"],
                                                                 emg_device, num_emg, frame_freq, analog_freq)
                                     self.emg_data_dict[session_trial_id] = {"headers": emg_headers, "data": emg_data}
-                                    np.savetxt(emg_array_dir, emg_data, fmt='%f')
+                                    save_raw_data_to_txt(emg_data, emg_array_dir, headers=emg_headers)
+        self.write_raw_data_to_pandas()
 
-                        if load_filt:
-                            df_name_to_cache = session_id + ' ' + subject_id + ' filtered'
-                            self.add_pandas(self.filt_concat_data_dict[df_name_to_cache], df_name_to_cache)
-
-    def update_filt_data_dict(self):
+    def write_raw_data_to_pandas(self):
+        temp_dict = {'emg_raw_data': {}, 'torque_raw_data': {}, 'trial_cycle_names': {}}
         for key in self.torque_data_dict:
             ids = key.split()
-            gait_cycle_dict = self.torque_data_dict[key]['gait_cycles']
+            session_name = ids[0] + ' ' + ids[1]
+            if session_name in temp_dict['trial_cycle_names'].keys():
+                trial_cycle_names = temp_dict['trial_cycle_names'][session_name]
+                emg_to_cache = temp_dict['emg_raw_data'][session_name]
+                torque_to_cache = temp_dict['torque_raw_data'][session_name]
+            else:
+                trial_cycle_names = []
+                emg_to_cache = [self.emg_data_dict[key]['headers']]
+                torque_to_cache = [self.torque_data_dict[key]['headers']]
 
-            filt_emg_array_dir = cache_path + 'raw_data/input/' + key + ' filtered.txt'
-            filt_torque_array_dir = cache_path + 'raw_data/labels/' + key + ' filtered.txt'
-            if os.path.isfile(filt_emg_array_dir) and os.path.isfile(filt_torque_array_dir):
-                for cycle in gait_cycle_dict:
-                    pd_emg = pd.read_csv(filt_emg_array_dir, sep=' ').set_index('Time').truncate(
-                        gait_cycle_dict[cycle]['Start'], gait_cycle_dict[cycle]['End'])
-                    pd_torque = pd.read_csv(filt_torque_array_dir, sep=' ').set_index('Time').truncate(
-                        gait_cycle_dict[cycle]['Start'], gait_cycle_dict[cycle]['End'])
-                    self.filt_data_dict[key + cycle] = pd_emg.join(
-                        pd_torque, how='outer').reset_index()
+            trial_cycle_names.append(key)
+            emg_to_cache.append(self.emg_data_dict[key]['data'])
+            torque_to_cache.append(self.torque_data_dict[key]['data'])
 
-            for cycle in gait_cycle_dict:
-                df_to_add = self.filt_data_dict[key + cycle].copy()
-                df_to_add['Time'] = (df_to_add['Time'] - gait_cycle_dict[cycle]['Start']).round(decimals=2)
-                df_to_add['Trial'] = ids[0] + ids[2] + cycle
+            temp_dict['trial_cycle_names'][session_name] = trial_cycle_names
+            temp_dict['emg_raw_data'][session_name] = emg_to_cache
+            temp_dict['torque_raw_data'][session_name] = torque_to_cache
 
-                if ids[0] + ' ' + ids[1] + ' filtered' not in self.filt_concat_data_dict:
-                    self.filt_concat_data_dict[ids[0] + ' ' + ids[1] + ' filtered'] = df_to_add
-                elif not self.filt_concat_data_dict[ids[0] + ' ' + ids[1] + ' filtered']['Trial'] \
-                        .str.contains(ids[0] + ids[2] + cycle).any():
-                    self.filt_concat_data_dict[ids[0] + ' ' + ids[1] + ' filtered'] = pd.concat(
-                        [self.filt_concat_data_dict[ids[0] + ' ' + ids[1] + ' filtered'], df_to_add], ignore_index=True)
+        for key in temp_dict['trial_cycle_names']:
+            emg_trial_cycle_names = []
+            torque_trial_cycle_names = []
+            emg_columns = temp_dict['emg_raw_data'][key].pop(0)
+            torque_columns = temp_dict['torque_raw_data'][key].pop(0)
+            for i, trial_cycle_name in enumerate(temp_dict['trial_cycle_names'][key]):
+                emg_trial_cycle_names.append([trial_cycle_name]*len(temp_dict['emg_raw_data'][key][i]))
+                torque_trial_cycle_names.append([trial_cycle_name] * len(temp_dict['torque_raw_data'][key][i]))
 
-            df_name_to_cache = ids[0] + ' ' + ids[1] + ' filtered'
-            df_to_cache = self.filt_concat_data_dict[df_name_to_cache].copy()
-            df_to_cache.name = df_name_to_cache
-            self.update_pandas(df_to_cache)
+            emg_data = np.concatenate(temp_dict['emg_raw_data'][key])
+            emg_df = pd.DataFrame(data=emg_data, columns=emg_columns)
+            emg_df = emg_df.assign(Trial=np.concatenate(emg_trial_cycle_names))
+            emg_df.name = key + ' emg_raw_data'
+
+            torque_data = np.concatenate(temp_dict['torque_raw_data'][key])
+            torque_df = pd.DataFrame(data=torque_data, columns=torque_columns)
+            torque_df = torque_df.assign(Trial=np.concatenate(torque_trial_cycle_names))
+            torque_df.name = key + ' torque_raw_data'
+
+            self.update_pandas(emg_df)
+            self.update_pandas(torque_df)
+
+    def cut_data_to_cycles(self, df, name, t_round_decim=2):
+        df_copy = df.copy()
+
+        data_to_cache = []
+        for group, df in df_copy.groupby('Trial'):
+            key = df.Trial.iloc[0]
+            ids = key.split()
+            if key not in self.gait_cycles_dict.keys():
+                warnings.warn('Gait cycles for trial ' + key + ' was not found in gait_cycles_dict.\n' +
+                              'The trial was excluded... to include it make sure to put the cycle into the '
+                              'gait_cycles_dict and rerun the function')
+                continue
+            cycles_dict = self.gait_cycles_dict[key]['gait_cycles']
+            for cycle in cycles_dict:
+                data_cycle = df.values[(cycles_dict[cycle]['Start'] <= df.values[:, 0]) &
+                                       (df.values[:, 0] <= cycles_dict[cycle]['End'])]
+                data_cycle[:, 0] = (np.array(data_cycle[:, 0]).astype(dtype=float) -
+                                    cycles_dict[cycle]['Start']).round(decimals=t_round_decim)
+                data_cycle[:, -1] = ids[0] + ids[2] + cycle
+                data_to_cache.append(data_cycle)
+
+        df_cut = pd.DataFrame(data=np.concatenate(data_to_cache), columns=df_copy.columns)
+        df_cut.name = name
+        self.update_pandas(df_cut)
 
     def add_pandas(self, df, name):
         """
@@ -295,10 +305,14 @@ class DataManager:
         """
         Deletes the pandas DataFrame from the self.list_of_pandas and cache, if it exists.
 
-        :param pandas.DataFrame df: a pandas DataFrame typically holding experiment data
+        :param pandas.DataFrame df: a pandas DataFrame (or the name of it) typically holding experiment data
         """
-        os.remove(cache_path + 'dataframes/' + df.name + '.pkl')
-        del self.list_of_pandas[df.name]
+        if isinstance(df, pd.DataFrame):
+            os.remove(cache_path + 'dataframes/' + df.name + '.pkl')
+            del self.list_of_pandas[df.name]
+        elif isinstance(df, str):
+            os.remove(cache_path + 'dataframes/' + df + '.pkl')
+            del self.list_of_pandas[df]
 
     def load_pandas(self):
         """
@@ -312,17 +326,29 @@ class DataManager:
             self.list_of_pandas[file.stem] = df
 
 
-def clear_raw_data_cache(session_id):
+def save_raw_data_to_txt(data, file_path, data_fmt='%f', headers=None):
+    if headers:
+        np.savetxt(file_path, data, fmt=data_fmt,
+                   header=' '.join(emg_id for emg_id in headers), comments='')
+    else:
+        np.savetxt(file_path, data, fmt=data_fmt)
+
+
+def clear_raw_data_cache(session_id=None):
     """
     Deletes all .txt files in the <cache_path>/raw_data that contain the string passed, typically session id.
     With a lot of trials this cache folder will take up a lot of memory and the files are typically never used after
     the data has been stored to a dataframe in the <cache_path>/dataframes directory.
 
     :param str session_id: Can be any string in the file names that should be deleted, typically session_id to delete
-    all files from a specific session.
+    all files from a specific session. If None, then all files will be deleted, (default: None).
     """
-    inputs_to_delete = Path(cache_path + 'raw_data/input/').glob('*' + session_id + '*.txt')
-    labels_to_delete = Path(cache_path + 'raw_data/labels/').glob('*' + session_id + '*.txt')
+    if session_id is None:
+        inputs_to_delete = Path(cache_path + 'raw_data/input/').glob('*.txt')
+        labels_to_delete = Path(cache_path + 'raw_data/labels/').glob('*.txt')
+    else:
+        inputs_to_delete = Path(cache_path + 'raw_data/input/').glob('*' + session_id + '*.txt')
+        labels_to_delete = Path(cache_path + 'raw_data/labels/').glob('*' + session_id + '*.txt')
 
     for file in inputs_to_delete:
         os.remove(str(file))
@@ -466,7 +492,9 @@ def get_torque_from_csv(file, torque_id, frame_freq):
     torque_data = np.array(torque_data, dtype=np.float)
     t = (torque_data[:, 0] / frame_freq)
 
-    return np.concatenate((t.reshape(t.shape[0], 1), torque_data[:, 2:]), axis=1)
+    headers = ['Time', 'MomentX', 'MomentY', 'MomentZ']
+
+    return np.concatenate((t.reshape(t.shape[0], 1), torque_data[:, 2:]), axis=1), headers
 
 
 def get_emg_from_csv(file, emg_device, num_emg, frame_freq, analog_freq):
