@@ -244,21 +244,21 @@ class DataManager:
         df_copy = df.copy()
 
         data_to_cache = []
+        trial_col_loc = df_copy.columns.get_loc('Trial')
         for group, df in df_copy.groupby('Trial'):
-            key = df.Trial.iloc[0]
-            ids = key.split()
-            if key not in self.gait_cycles_dict.keys():
-                warnings.warn('Gait cycles for trial ' + key + ' was not found in gait_cycles_dict.\n' +
+            ids = group.split()
+            if group not in self.gait_cycles_dict.keys():
+                warnings.warn('Gait cycles for trial ' + group + ' was not found in gait_cycles_dict.\n' +
                               'The trial was excluded... to include it make sure to put the cycle into the '
                               'gait_cycles_dict and rerun the function')
                 continue
-            cycles_dict = self.gait_cycles_dict[key]['gait_cycles']
+            cycles_dict = self.gait_cycles_dict[group]['gait_cycles']
             for cycle in cycles_dict:
                 data_cycle = df.values[(cycles_dict[cycle]['Start'] <= df.values[:, 0]) &
                                        (df.values[:, 0] <= cycles_dict[cycle]['End'])]
                 data_cycle[:, 0] = (np.array(data_cycle[:, 0]).astype(dtype=float) -
                                     cycles_dict[cycle]['Start']).round(decimals=t_round_decim)
-                data_cycle[:, -1] = ids[0] + ids[2] + cycle
+                data_cycle[:, trial_col_loc] = ids[0] + ids[2] + cycle
                 data_to_cache.append(data_cycle)
 
         df_cut = pd.DataFrame(data=np.concatenate(data_to_cache), columns=df_copy.columns)
@@ -309,10 +309,12 @@ class DataManager:
         """
         if isinstance(df, pd.DataFrame):
             os.remove(cache_path + 'dataframes/' + df.name + '.pkl')
-            del self.list_of_pandas[df.name]
+            if df.name in self.list_of_pandas.keys():
+                del self.list_of_pandas[df.name]
         elif isinstance(df, str):
             os.remove(cache_path + 'dataframes/' + df + '.pkl')
-            del self.list_of_pandas[df]
+            if df in self.list_of_pandas.keys():
+                del self.list_of_pandas[df]
 
     def load_pandas(self):
         """
