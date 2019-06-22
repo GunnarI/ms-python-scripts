@@ -305,16 +305,20 @@ class DataManager:
         """
         Deletes the pandas DataFrame from the self.list_of_pandas and cache, if it exists.
 
-        :param pandas.DataFrame df: a pandas DataFrame (or the name of it) typically holding experiment data
+        :param pandas.DataFrame df: a pandas DataFrame (or the name of it) typically holding experiment data. If df is
+        a string then every DataFrame that has a name where df is a substring, will be deleted.
         """
         if isinstance(df, pd.DataFrame):
             os.remove(cache_path + 'dataframes/' + df.name + '.pkl')
             if df.name in self.list_of_pandas.keys():
                 del self.list_of_pandas[df.name]
         elif isinstance(df, str):
-            os.remove(cache_path + 'dataframes/' + df + '.pkl')
-            if df in self.list_of_pandas.keys():
-                del self.list_of_pandas[df]
+            for f in Path(cache_path + 'dataframes/').glob('*' + df + '*.pkl'):
+                os.remove(str(f))
+            # os.remove(cache_path + 'dataframes/' + df + '.pkl')
+            for key in list(self.list_of_pandas.keys()):
+                if df in key:
+                    del self.list_of_pandas[key]
 
     def load_pandas(self):
         """
