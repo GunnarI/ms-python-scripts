@@ -3,6 +3,8 @@ import sys
 import csv
 import json
 import warnings
+import logging
+import re
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -228,12 +230,12 @@ class DataManager:
                 torque_trial_cycle_names.append([trial_cycle_name] * len(temp_dict['torque_raw_data'][key][i]))
 
             emg_data = np.concatenate(temp_dict['emg_raw_data'][key])
-            emg_df = pd.DataFrame(data=emg_data, columns=emg_columns)
+            emg_df = pd.DataFrame(data=emg_data, columns=emg_columns, dtype=float)
             emg_df = emg_df.assign(Trial=np.concatenate(emg_trial_cycle_names))
             emg_df.name = key + ' emg_raw_data'
 
             torque_data = np.concatenate(temp_dict['torque_raw_data'][key])
-            torque_df = pd.DataFrame(data=torque_data, columns=torque_columns)
+            torque_df = pd.DataFrame(data=torque_data, columns=torque_columns, dtype=float)
             torque_df = torque_df.assign(Trial=np.concatenate(torque_trial_cycle_names))
             torque_df.name = key + ' torque_raw_data'
 
@@ -244,9 +246,11 @@ class DataManager:
         df_copy = df.copy()
 
         data_to_cache = []
-        trial_col_loc = df_copy.columns.get_loc('Trial')
+        trial_names = []
+        # trial_col_loc = df_copy.columns.get_loc('Trial')
         for group, df in df_copy.groupby('Trial'):
             ids = group.split()
+            df.pop('Trial')
             if group not in self.gait_cycles_dict.keys():
                 warnings.warn('Gait cycles for trial ' + group + ' was not found in gait_cycles_dict.\n' +
                               'The trial was excluded... to include it make sure to put the cycle into the '
@@ -254,14 +258,18 @@ class DataManager:
                 continue
             cycles_dict = self.gait_cycles_dict[group]['gait_cycles']
             for cycle in cycles_dict:
-                data_cycle = df.values[(cycles_dict[cycle]['Start'] <= df.values[:, 0]) &
-                                       (df.values[:, 0] <= cycles_dict[cycle]['End'])]
+                data_cycle = df.to_numpy()[(cycles_dict[cycle]['Start'] <= df.to_numpy()[:, 0]) &
+                                           (df.to_numpy()[:, 0] <= cycles_dict[cycle]['End'])]
                 data_cycle[:, 0] = (np.array(data_cycle[:, 0]).astype(dtype=float) -
                                     cycles_dict[cycle]['Start']).round(decimals=t_round_decim)
-                data_cycle[:, trial_col_loc] = ids[0] + ids[2] + cycle
+                # data_cycle[:, trial_col_loc] = ids[0] + ids[2] + cycle
+                trial_names.append([ids[0] + ids[2] + cycle]*len(data_cycle))
                 data_to_cache.append(data_cycle)
 
-        df_cut = pd.DataFrame(data=np.concatenate(data_to_cache), columns=df_copy.columns)
+        columns_wo_trial = list(df_copy)
+        columns_wo_trial.pop(df_copy.columns.get_loc('Trial'))
+        df_cut = pd.DataFrame(data=np.concatenate(data_to_cache), columns=columns_wo_trial)
+        df_cut = df_cut.assign(Trial=np.concatenate(trial_names))
         df_cut.name = name
         self.update_pandas(df_cut)
 
@@ -291,7 +299,7 @@ class DataManager:
         """
         if df.name not in self.list_of_pandas.keys():
             self.add_pandas(df, df.name)
-            warnings.warn('The dataframe ' + df.name + ' did not exists, used add_pandas(df, name) instead')
+            logging.info('The dataframe ' + df.name + ' did not exists, used add_pandas(df, name) instead')
             return
 
         if rename is not None:
@@ -315,7 +323,6 @@ class DataManager:
         elif isinstance(df, str):
             for f in Path(cache_path + 'dataframes/').glob('*' + df + '*.pkl'):
                 os.remove(str(f))
-            # os.remove(cache_path + 'dataframes/' + df + '.pkl')
             for key in list(self.list_of_pandas.keys()):
                 if df in key:
                     del self.list_of_pandas[key]
@@ -620,12 +627,16 @@ def get_gait_cycles(file, leg='Right'):
                         gait_cycles_name[items_after_fp_max[0]] == 'Foot Off' and
                         gait_cycles_name[items_after_fp_max[1]] == 'Foot Strike'
                 )
-                if items_before_fp_max.size > 1:
+                if not faulty_cycle and np.abs(gait_cycles_time[items_before_fp_max[items_before_fp_max.size-1]] -
+                                               gait_cycles_time[items_after_fp_max[1]]) > 2.50:
+                    warnings.warn('Long gait cycle (longer than 2.5sec) in file: ' + file)
+                    faulty_cycle = True
+                if not faulty_cycle and items_before_fp_max.size > 1:
                     if np.abs(gait_cycles_time[items_before_fp_max[items_before_fp_max.size-1]] -
                               gait_cycles_time[items_before_fp_max[items_before_fp_max.size-2]]) < 0.30:
                         warnings.warn('Double heel strike in file: ' + file)
                         faulty_cycle = True
-                if items_after_fp_max.size > 2:
+                if not faulty_cycle and items_after_fp_max.size > 2:
                     if np.abs(gait_cycles_time[items_after_fp_max[2]] - gait_cycles_time[items_after_fp_max[1]]) < 0.30:
                         warnings.warn('Double heel strike in file: ' + file)
                         faulty_cycle = True

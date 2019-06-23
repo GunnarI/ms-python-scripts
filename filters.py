@@ -72,14 +72,14 @@ def min_max_normalize_data(df, secondary_df=None, norm_emg=True, norm_torque=Fal
     if 'Trial' in col:
         trial = return_df.pop('Trial')
 
-    emg = return_df.values
+    emg = return_df.to_numpy()
 
     if secondary_df is None:
         if norm_emg:
             emg_scaler = preprocessing.MinMaxScaler(feature_range=(0, 1)).fit(emg)
         if norm_torque:
             torque_scaler = preprocessing.MinMaxScaler(
-                feature_range=((torque.min()/torque.max()), 1)).fit(torque.values.reshape(-1, 1))
+                feature_range=((torque.min()/torque.max()), 1)).fit(torque.to_numpy().reshape(-1, 1))
     else:
         scaling_df = secondary_df.copy()
 
@@ -90,18 +90,18 @@ def min_max_normalize_data(df, secondary_df=None, norm_emg=True, norm_torque=Fal
         if 'Trial' in col:
             scaling_df.pop('Trial')
 
-        s_emg = scaling_df.values
+        s_emg = scaling_df.to_numpy()
 
         if norm_emg:
             emg_scaler = preprocessing.MinMaxScaler(feature_range=(0, 1)).fit(s_emg)
         if norm_torque:
             torque_scaler = preprocessing.MinMaxScaler(
-                feature_range=((s_torque.min()/s_torque.max()), 1)).fit(s_torque.values.reshape(-1, 1))
+                feature_range=((s_torque.min()/s_torque.max()), 1)).fit(s_torque.to_numpy().reshape(-1, 1))
 
     if norm_emg:
         return_df = pd.DataFrame(emg_scaler.transform(emg), columns=return_df.columns, index=return_df.index)
     if norm_torque:
-        torque = torque_scaler.transform(torque.values.reshape(-1, 1))
+        torque = torque_scaler.transform(torque.to_numpy().reshape(-1, 1))
 
     if 'Time' in col:
         return_df.insert(0, 'Time', time)
@@ -128,13 +128,16 @@ def filter_emg(emg_df, lowcut, highcut, window, fs, fs_downsample=0):
         t = df.pop('Time')
         trial = df.pop('Trial')
         num_emg = df.shape[1]
-        t_short = t_vec_after_ma(window, t.values)
+        t_short = t_vec_after_ma(window, t.to_numpy())
         if fs_downsample > 0:
             t_short = np.ceil(t_short[0::fs_downsample] * (fs / fs_downsample)) * (fs_downsample / fs)
+            t_short = np.around(t_short, decimals=int((fs/fs_downsample)/10))
+        else:
+            t_short = np.around(t_short, decimals=int(fs/10))
         filtered_emg = np.zeros(shape=(len(t_short), num_emg + 1))
         filtered_emg[:, 0] = t_short
 
-        for i, column in enumerate(df.values.T):
+        for i, column in enumerate(df.to_numpy(dtype=float).T):
             column = noise_filter(column, lowcut, highcut, fs)
             column = demodulation(column)
             column, t = smoothing(column, t, window, fs)
@@ -146,7 +149,7 @@ def filter_emg(emg_df, lowcut, highcut, window, fs, fs_downsample=0):
         list_of_emg_filtered.append(filtered_emg)
         trial_cycle_names.append([str(group)]*len(filtered_emg))
 
-    emg_filtered_df = pd.DataFrame(data=np.concatenate(list_of_emg_filtered), columns=column_names)
+    emg_filtered_df = pd.DataFrame(data=np.concatenate(list_of_emg_filtered), columns=column_names, dtype=float)
     emg_filtered_df = emg_filtered_df.assign(Trial=np.concatenate(trial_cycle_names))
     old_name_split = emg_df.name.split()
     emg_filtered_df.name = old_name_split[0] + old_name_split[1] + ' filtered'

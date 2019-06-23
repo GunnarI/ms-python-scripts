@@ -5,7 +5,8 @@ from scipy import signal as scisig
 
 
 def get_min_med_max_cycles(df):
-    grouped_by_cycle = df.groupby('Trial').size()
+    df_copy = df.copy()
+    grouped_by_cycle = df_copy.groupby('Trial').size()
     grouped_by_cycle = grouped_by_cycle.sort_values()
 
     min_cycle_len = grouped_by_cycle.iloc[0]
@@ -95,16 +96,21 @@ def plot_moment_avg(df, plot_min_med_max=False, title='Knee joint moments', ylab
 
     std_range = (moment_avg - moment_std, moment_avg + moment_std)
     if not as_percentage:
-        std_range[0][np.isnan(std_range[0].values)] = 0
-        std_range[1][np.isnan(std_range[1].values)] = 0
+        std_range[0][np.isnan(std_range[0].to_numpy())] = 0
+        std_range[1][np.isnan(std_range[1].to_numpy())] = 0
 
     ax1.fill_between(xvec, std_range[0], std_range[1], alpha=0.2)
     ax1.plot(xvec, moment_avg, label='Average')
     ax1.set_title(title)
-    ax1.set_xlabel('gait cycle duration [s]')
+    if as_percentage:
+        ax1.set_xlabel('Percentage of gait cycle [%]')
+    else:
+        ax1.set_xlabel('gait cycle duration [s]')
     ax1.set_ylabel(ylabel)
 
     if plot_min_med_max:
+        print('The fastest cycles was: ' + min_cycle[0] + '\n\tTime steps: ' + str(min_cycle[1]))
+        print('The slowest cycles was: ' + max_cycle[0] + '\n\tTime steps: ' + str(max_cycle[1]))
         ax1.plot(min_cycle_xvec, min_cycle_moments, label='Fastest cycle')
         ax1.plot(med_cycle_xvec, med_cycle_moments, label='Median cycle')
         ax1.plot(max_cycle_xvec, max_cycle_moments, label='Slowest cycle')
@@ -238,11 +244,11 @@ def plot_moment_w_muscle(df, plot_trial='average', muscle_list=None, title='Mome
         if plot_trial == 'average' or plot_trial == 'mean':
             for i, muscle in enumerate(muscle_list):
                 emg_avg = df.groupby('Time')[muscle].mean()
-                ax2.plot(time_vec, emg_avg.values, color=colors[i], label=muscle)
+                ax2.plot(time_vec, emg_avg.to_numpy(), color=colors[i], label=muscle)
         else:
             for i, muscle in enumerate(muscle_list):
                 emg = df[muscle][selected_trial]
-                ax2.plot(time_vec, emg.values, color=colors[i], label=muscle)
+                ax2.plot(time_vec, emg.to_numpy(), color=colors[i], label=muscle)
 
     fig.legend()
 
@@ -275,11 +281,11 @@ def plot_moment_derivative(df, plot_trial='average', muscle_list=None):
         if plot_trial == 'average' or plot_trial == 'mean':
             for i, muscle in enumerate(muscle_list):
                 emg_avg = df.groupby('Time')[muscle].mean()
-                ax2.plot(time_vec[:-1], emg_avg.values[:-1])
+                ax2.plot(time_vec[:-1], emg_avg.to_numpy()[:-1])
         else:
             for i, muscle in enumerate(muscle_list):
                 emg = df[muscle][selected_trial]
-                ax2.plot(time_vec[:-1], emg.values[:-1])
+                ax2.plot(time_vec[:-1], emg.to_numpy()[:-1])
 
 
 def set_gait_cycle_percentage(df):
