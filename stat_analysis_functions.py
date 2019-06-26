@@ -1,3 +1,4 @@
+from deprecated import deprecated
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
@@ -65,7 +66,7 @@ def plot_moment_avg(df, plot_min_med_max=False, title='Knee joint moments', ylab
         num_steps = len(xvec)
         moments = np.zeros((len(trial_groups), num_steps))
         for i, df in enumerate(trial_groups):
-            moments[i, :] = resample_torque(df.Torque, num_steps)
+            moments[i, :] = resample_signal(df.Torque, num_steps)
             if plot_min_med_max:
                 min_cycle_xvec = xvec
                 med_cycle_xvec = xvec
@@ -125,12 +126,18 @@ def plot_moment_avg(df, plot_min_med_max=False, title='Knee joint moments', ylab
     return fig
 
 
-def plot_muscle_average(df, muscle_list=None, plot_min_and_max=False, title='EMG Muscle Activity',
-                        ylabel='EMG amplitude', xlabel='gait cycle duration [s]', save_fig_as=None):
-    min_cycle, med_cycle, max_cycle = get_min_med_max_cycles(df)
+def plot_muscle_average(df, muscle_list=None, plot_min_med_max=False, title='EMG Muscle Activity',
+                        ylabel='EMG amplitude', save_fig_as=None, y_lim=None,
+                        plot_max_emg=False, as_percentage=True):
+    if as_percentage:
+        df_copy = set_gait_cycle_percentage(df)
+    else:
+        df_copy = df.copy()
+
+    min_cycle, med_cycle, max_cycle = get_min_med_max_cycles(df_copy)
 
     if not muscle_list:
-        muscle_list = list(df)
+        muscle_list = list(df_copy)
         muscle_list.remove('Time')
         muscle_list.remove('Torque')
         muscle_list.remove('Trial')
@@ -141,33 +148,80 @@ def plot_muscle_average(df, muscle_list=None, plot_min_and_max=False, title='EMG
     fig.suptitle(title)
     fig.text(0.06, 0.5, ylabel, ha='right', va='center', rotation='vertical')
     for i, muscle in enumerate(muscle_list):
-        emg_avg = df.groupby('Time')[muscle].mean()
-        emg_std = df.groupby('Time')[muscle].std()
-        time_vec = np.arange(0, max_cycle[1]) / 100
+        if as_percentage:
+            trial_groups = [trial for _, trial in df_copy.groupby('Trial')]
+            xvec = np.arange(0, 101)
+            num_steps = len(xvec)
+            emg_vec = np.zeros((len(trial_groups), num_steps))
+            for j, df in enumerate(trial_groups):
+                emg_vec[j, :] = resample_signal(df[muscle], num_steps)
+                if plot_min_med_max:
+                    min_cycle_xvec = xvec
+                    med_cycle_xvec = xvec
+                    max_cycle_xvec = xvec
+
+                    if df.iloc[0]['Trial'] == min_cycle[0]:
+                        min_cycle_emg = emg_vec[j, :]
+                    elif df.iloc[0]['Trial'] == med_cycle[0]:
+                        med_cycle_emg = emg_vec[j, :]
+                    elif df.iloc[0]['Trial'] == max_cycle[0]:
+                        max_cycle_emg = emg_vec[j, :]
+
+                if plot_max_emg:
+                    max_emg_xvec = xvec
+
+                    if df.iloc[0]['Trial'] == df_copy.loc[df_copy[muscle].idxmax()]['Trial']:
+                        max_emg = emg_vec[j, :]
+
+            emg_avg = np.mean(emg_vec, axis=0)
+            emg_std = np.std(emg_vec, axis=0)
+        else:
+            emg_avg = df_copy.groupby('Time')[muscle].mean()
+            emg_std = df_copy.groupby('Time')[muscle].std()
+            xvec = np.arange(0, max_cycle[1]) / 100
+
+            if plot_min_med_max:
+                min_cycle_xvec = df_copy.loc[df_copy['Trial'] == min_cycle[0], 'Time']
+                med_cycle_xvec = df_copy.loc[df_copy['Trial'] == med_cycle[0], 'Time']
+                max_cycle_xvec = df_copy.loc[df_copy['Trial'] == max_cycle[0], 'Time']
+
+                min_cycle_emg = df_copy.loc[df_copy['Trial'] == min_cycle[0], muscle]
+                med_cycle_emg = df_copy.loc[df_copy['Trial'] == med_cycle[0], muscle]
+                max_cycle_emg = df_copy.loc[df_copy['Trial'] == max_cycle[0], muscle]
+
+            if plot_max_emg:
+                max_trial = df_copy.loc[df_copy[muscle].idxmax()]['Trial']
+                max_emg_xvec = df_copy.loc[df_copy['Trial'] == max_trial, 'Time']
+                max_emg = df_copy.loc[df_copy['Trial'] == max_trial, muscle]
 
         std_range = (emg_avg - emg_std, emg_avg + emg_std)
 
         axs[i, 0] = plt.subplot(num_plots, 1, i + 1)
-        axs[i, 0].fill_between(time_vec, std_range[0], std_range[1], alpha=0.2)
-        axs[i, 0].plot(time_vec, emg_avg, label='Average')
-        axs[i, 0].set_xlabel(xlabel)
+        axs[i, 0].fill_between(xvec, std_range[0], std_range[1], alpha=0.2)
+        axs[i, 0].plot(xvec, emg_avg, label='Average')
+        if as_percentage:
+            axs[i, 0].set_xlabel('Percentage of gait cycle [%]')
+        else:
+            axs[i, 0].set_xlabel('gait cycle duration [s]')
 
-        if plot_min_and_max:
-            axs[i, 0].plot(df.loc[df['Trial'] == min_cycle[0], 'Time'],
-                           df.loc[df['Trial'] == min_cycle[0], muscle],
-                           label='Fastest cycle')
-            axs[i, 0].plot(df.loc[df['Trial'] == max_cycle[0], 'Time'],
-                           df.loc[df['Trial'] == max_cycle[0], muscle],
-                           label='Slowest cycle')
-            axs[i, 0].plot(df.loc[df['Trial'] == med_cycle[0], 'Time'],
-                           df.loc[df['Trial'] == med_cycle[0], muscle],
-                           label='Median cycle')
+        if plot_min_med_max:
+            axs[i, 0].plot(min_cycle_xvec, min_cycle_emg, label='Fastest cycle')
+            axs[i, 0].plot(med_cycle_xvec, med_cycle_emg, label='Slowest cycle')
+            axs[i, 0].plot(max_cycle_xvec, max_cycle_emg, label='Median cycle')
 
-        axs[i, 0].set_ylim(0, 0.99)
-        axs[i, 0].set_yticks(np.arange(0, 1, 0.2))
+        if plot_max_emg:
+            max_trial = df_copy.loc[df_copy[muscle].idxmax()]['Trial']
+            print('The trial with maximum signal for muscle ' + muscle + ': ' + max_trial)
+            axs[i, 0].plot(max_emg_xvec, max_emg, label='Muscle max value')
+
+        if y_lim is None:
+            axs[i, 0].set_ylim(0, 0.99)
+        else:
+            axs[i, 0].set_ylim(y_lim[0], y_lim[1])
+        axs[i, 0].set_yticks(np.arange(y_lim[0], y_lim[1], 0.2))
         axs[i, 0].text(0.72, 0.95, muscle, size='large', ha='left', va='top', transform=axs[i, 0].transAxes)
 
-    if plot_min_and_max:
+    if plot_min_med_max:
         handles, labels = axs[0, 0].get_legend_handles_labels()
         fig.legend(handles, labels, loc='upper right')
         # fig.legend((l1, l2, l3, l4), loc='upper right')
@@ -218,16 +272,52 @@ def plot_emg_torque(df, emg_to_plot):
         plt.show()
 
 
+def plot_emg_from_trial(df, muscle_list, trial_name):
+    df_copy = df.copy()
+
+    for group, df_i in df_copy.groupby('Trial'):
+        if group == trial_name:
+            t = df_i.pop('Time')
+            for muscle in muscle_list:
+                fig, ax1 = plt.subplots()
+                color = 'tab:blue'
+                ax1.set_xlabel('Time (s)')
+                ax1.set_ylabel('Muscle signal', color=color)
+                ax1.plot(t, df_i[muscle])
+                ax1.tick_params(axis='y', labelcolor=color)
+
+                fig.tight_layout()  # otherwise the right y-label is slightly clipped
+                plt.title(muscle)
+                plt.show()
+
+
 def plot_moment_w_muscle(df, plot_trial='average', muscle_list=None, title='Moments and EMG',
                          moment_label=r'$\Delta$ joint moment $[\frac{N.mm}{kg.s}]$',
-                         emg_label=r'normalized emg $[V/V]$', save_fig_as=None):
+                         emg_label=r'normalized emg $[V/V]$', save_fig_as=None, as_percentage=True):
+    if as_percentage:
+        df_copy = set_gait_cycle_percentage(df)
+    else:
+        df_copy = df.copy()
+
     if plot_trial == 'average' or plot_trial == 'mean':
-        moments = df.groupby('Time')['Torque'].mean()
-        time_vec = moments.index
+        if as_percentage:
+            trial_groups = [trial for _, trial in df_copy.groupby('Trial')]
+            xvec = np.arange(0, 101)
+            num_steps = len(xvec)
+            moments = np.zeros((len(trial_groups), num_steps))
+            for i, df in enumerate(trial_groups):
+                moments[i, :] = resample_signal(df.Torque, num_steps)
+            moments = np.mean(moments, axis=0)
+        else:
+            moments = df.groupby('Time')['Torque'].mean()
+            xvec = moments.index
     else:
         selected_trial = df.Trial.str.contains(plot_trial)
         moments = df.Torque[selected_trial]
-        time_vec = df.Time[selected_trial]
+        if as_percentage:
+            xvec = np.linspace(0, 100, len(moments), endpoint=True)
+        else:
+            xvec = df.Time[selected_trial]
 
     fig, ax1 = plt.subplots(figsize=(7, 5))
     fig.suptitle(title)
@@ -235,7 +325,7 @@ def plot_moment_w_muscle(df, plot_trial='average', muscle_list=None, title='Mome
     color = 'blue'
     ax1.set_xlabel('gait cycle duration[s]')
     ax1.set_ylabel(moment_label)
-    ax1.plot(time_vec, moments, color=color, label='Joint moment')
+    ax1.plot(xvec, moments, color=color, label='Joint moment')
 
     if muscle_list is not None:
         colors = ['red', 'green', 'cyan', 'yellow']
@@ -243,12 +333,23 @@ def plot_moment_w_muscle(df, plot_trial='average', muscle_list=None, title='Mome
         ax2.set_ylabel(emg_label)
         if plot_trial == 'average' or plot_trial == 'mean':
             for i, muscle in enumerate(muscle_list):
-                emg_avg = df.groupby('Time')[muscle].mean()
-                ax2.plot(time_vec, emg_avg.to_numpy(), color=colors[i], label=muscle)
+                if as_percentage:
+                    emg_vec = np.zeros((len(trial_groups), num_steps))
+                    for j, df in enumerate(trial_groups):
+                        emg_vec[j, :] = resample_signal(df[muscle], num_steps)
+                    emg_avg = np.mean(emg_vec, axis=0)
+                else:
+                    emg_avg = df.groupby('Time')[muscle].mean()
+                    emg_avg = emg_avg.to_numpy()
+                ax2.plot(xvec, emg_avg, color=colors[i], label=muscle)
         else:
             for i, muscle in enumerate(muscle_list):
                 emg = df[muscle][selected_trial]
-                ax2.plot(time_vec, emg.to_numpy(), color=colors[i], label=muscle)
+                if as_percentage:
+                    xvec = np.linspace(0, 100, len(emg), endpoint=True)
+                else:
+                    xvec = df.Time[selected_trial]
+                ax2.plot(xvec, emg.to_numpy(), color=colors[i], label=muscle)
 
     fig.legend()
 
@@ -302,8 +403,8 @@ def set_gait_cycle_percentage(df):
     return return_df
 
 
-def resample_torque(torque, new_sample_length):
-    if len(torque) == new_sample_length:
-        return torque
+def resample_signal(signal, new_sample_length):
+    if len(signal) == new_sample_length:
+        return signal
     else:
-        return scisig.resample(torque, new_sample_length)
+        return scisig.resample(signal, new_sample_length)
