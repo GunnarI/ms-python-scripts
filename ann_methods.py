@@ -18,6 +18,7 @@ from tensorflow.python.keras import optimizers
 import filters as filt
 import stat_analysis_functions as saf
 
+
 class ANN:
     def __init__(self, dataset=None, spec_cache_code=None, load_from_cache=None, load_models=None):
         self.models = {}
@@ -33,7 +34,7 @@ class ANN:
             self.prepare_data()
         else:
             if load_from_cache is None:
-                cached_folders = Path('./cache/').glob('[0-9]*?*')
+                cached_folders = Path('./cache/ann/').glob('[0-9]*?*')
                 newest_cache = 0
                 for folder in cached_folders:
                     folder_time_stamp = int(folder.stem.split('_')[0])
@@ -41,7 +42,7 @@ class ANN:
                         newest_cache = folder_time_stamp
                         load_from_cache = folder.stem
 
-            self.cache_path = './cache/' + load_from_cache + '/'
+            self.cache_path = './cache/ann/' + load_from_cache + '/'
             if os.path.exists(self.cache_path):
                 self.load_datasets()
                 if load_models is None:
@@ -333,9 +334,9 @@ class ANN:
 
     def create_cache_dir(self, spec_cache_code=None):
         if spec_cache_code is None:
-            self.cache_path = './cache/' + time.strftime('%Y%m%d%H%M') + '/'
+            self.cache_path = './cache/ann/' + time.strftime('%Y%m%d%H%M') + '/'
         else:
-            self.cache_path = './cache/' + time.strftime('%Y%m%d%H%M') + '_' + spec_cache_code + '/'
+            self.cache_path = './cache/ann/' + time.strftime('%Y%m%d%H%M') + '_' + spec_cache_code + '/'
         try:
             os.mkdir(self.cache_path)
             os.mkdir(self.cache_path + 'models/')

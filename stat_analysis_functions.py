@@ -1,4 +1,5 @@
 from deprecated import deprecated
+import os
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
@@ -49,8 +50,8 @@ def plot_muscle_correlations(df, method='pearson', title='Correlation'):
     sns.heatmap(correlation_matrix, annot=True, fmt=".2f", vmin=-1, vmax=1)
 
 
-def plot_moment_avg(df, plot_min_med_max=False, title='Knee joint moments', ylabel=r'joint moment $[\frac{N.mm}{kg}]$',
-                    save_fig_as=None):
+def plot_moment_avg(df, plot_min_med_max=False, title='Knee joint moments', xlabel='percentage of gait cycle [%]',
+                    ylabel=r'joint moment $[\frac{N.mm}{kg}]$', y_axis_range=None, save_fig_as=None):
     df_copy = set_gait_cycle_percentage(df)
     min_cycle, med_cycle, max_cycle = get_min_med_max_cycles(df_copy)
     fig = plt.figure(figsize=(8, 5))
@@ -81,10 +82,16 @@ def plot_moment_avg(df, plot_min_med_max=False, title='Knee joint moments', ylab
     std_range = (moment_avg - moment_std, moment_avg + moment_std)
 
     ax1.fill_between(xvec, std_range[0], std_range[1], alpha=0.2)
-    ax1.plot(xvec, moment_avg, label='Average')
+    if plot_min_med_max:
+        ax1.plot(xvec, moment_avg, label='Average')
+    else:
+        ax1.plot(xvec, moment_avg)
     ax1.set_title(title)
-    ax1.set_xlabel('Percentage of gait cycle [%]')
+    ax1.set_xlabel(xlabel)
     ax1.set_ylabel(ylabel)
+
+    if y_axis_range is not None:
+        ax1.set_ylim(y_axis_range[0], y_axis_range[1])
 
     if plot_min_med_max:
         print('The fastest cycles was: ' + min_cycle[0] + '\n\tTime steps: ' + str(min_cycle[1]))
@@ -92,20 +99,19 @@ def plot_moment_avg(df, plot_min_med_max=False, title='Knee joint moments', ylab
         ax1.plot(min_cycle_xvec, min_cycle_moments, label='Fastest cycle')
         ax1.plot(med_cycle_xvec, med_cycle_moments, label='Median cycle')
         ax1.plot(max_cycle_xvec, max_cycle_moments, label='Slowest cycle')
-    ax1.legend()
+        ax1.legend()
 
     fig.add_subplot(ax1)
     if not save_fig_as:
         fig.show()
     else:
-        fig.savefig('./figures/' + save_fig_as + '.png', bbox_inches='tight')
+        save_image_as(fig, './figures/moment_avg/', save_fig_as)
 
     return fig
 
 
 def plot_muscle_average(df, muscle_list=None, plot_min_med_max=False, title='EMG Muscle Activity',
-                        ylabel='EMG amplitude', save_fig_as=None, y_lim=None,
-                        plot_max_emg=False):
+                        ylabel='EMG amplitude', y_axis_range=None, save_fig_as=None, plot_max_emg=False):
     df_copy = set_gait_cycle_percentage(df)
 
     min_cycle, med_cycle, max_cycle = get_min_med_max_cycles(df_copy)
@@ -166,11 +172,11 @@ def plot_muscle_average(df, muscle_list=None, plot_min_med_max=False, title='EMG
             print('The trial with maximum signal for muscle ' + muscle + ': ' + max_trial)
             axs[i, 0].plot(max_emg_xvec, max_emg, label='Muscle max value')
 
-        if y_lim is None:
+        if y_axis_range is None:
             axs[i, 0].set_ylim(0, 0.99)
         else:
-            axs[i, 0].set_ylim(y_lim[0], y_lim[1])
-        axs[i, 0].set_yticks(np.arange(y_lim[0], y_lim[1], 0.2))
+            axs[i, 0].set_ylim(y_axis_range[0], y_axis_range[1])
+        axs[i, 0].set_yticks(np.arange(y_axis_range[0], y_axis_range[1], 0.2))
         axs[i, 0].text(0.72, 0.95, muscle, size='large', ha='left', va='top', transform=axs[i, 0].transAxes)
 
     if plot_min_med_max:
@@ -180,13 +186,13 @@ def plot_muscle_average(df, muscle_list=None, plot_min_med_max=False, title='EMG
     if not save_fig_as:
         fig.show()
     else:
-        fig.savefig('./figures/' + save_fig_as + '.png', bbox_inches='tight')
+        save_image_as(fig, './figures/emg_avg/', save_fig_as)
 
 
 def plot_cycle_time_quartile(df, title='Gait cycle distribution', save_fig_as=None):
     time_intervals = df.groupby('Trial')['Time'].agg(np.ptp)
-    fig = plt.figure(1, figsize=(7, 2))
-    ax = fig.add_subplot(111)
+    fig, ax = plt.subplots(1, 1, figsize=(7, 2))
+    # ax = fig.add_subplot(111)
     plot_result = ax.boxplot(time_intervals, whis='range', vert=False)
     ax.set_title(title)
     ax.set_xlabel('Cycle duration [s]')
@@ -195,7 +201,7 @@ def plot_cycle_time_quartile(df, title='Gait cycle distribution', save_fig_as=No
     if not save_fig_as:
         fig.show()
     else:
-        fig.savefig('./figures/' + save_fig_as + '.png', bbox_inches='tight')
+        save_image_as(fig, './figures/cycle_time_quartiles/', save_fig_as)
 
     return plot_result
 
@@ -343,3 +349,10 @@ def resample_signal(signal, new_sample_length):
         return signal
     else:
         return scisig.resample(signal, new_sample_length)
+
+
+def save_image_as(fig_object, directory, file_name):
+    # directory = './figures/moment_avg/'
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+    fig_object.savefig(directory + file_name + '.png', bbox_inches='tight')
