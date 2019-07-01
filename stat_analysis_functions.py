@@ -1,5 +1,6 @@
 from deprecated import deprecated
 import os
+import logging
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
@@ -38,19 +39,31 @@ def get_muscle_std(df, muscle_list=None):
     return muscle_list_std
 
 
-def plot_muscle_correlations(df, method='pearson', title='Correlation'):
+def plot_muscle_correlations(df, method='pearson', include_torque=False, title=None, save_fig_as=None):
     muscle_df = df.copy()
-    for column in muscle_df:
-        if column in ['Time', 'Torque', 'Trial']:
-            muscle_df.pop(column)
+
+    if include_torque:
+        muscle_df.drop(columns=['Time', 'Trial'], errors='ignore', inplace=True)
+    else:
+        muscle_df.drop(columns=['Time', 'Torque', 'Trial'], errors='ignore', inplace=True)
 
     correlation_matrix = muscle_df.corr(method=method)
     plt.figure()
-    plt.title(title)
-    sns.heatmap(correlation_matrix, annot=True, fmt=".2f", vmin=-1, vmax=1)
+    if title is not None:
+        plt.title(title)
+    sns_plot = sns.heatmap(correlation_matrix, annot=True, fmt=".2f", vmin=-1, vmax=1)
+
+    fig = sns_plot.get_figure()
+
+    if not save_fig_as:
+        fig.show()
+    else:
+        save_image_as(fig, './figures/correlations/', save_fig_as)
+
+    return fig
 
 
-def plot_moment_avg(df, plot_min_med_max=False, title='Knee joint moments', xlabel='percentage of gait cycle [%]',
+def plot_moment_avg(df, plot_min_med_max=False, title=None, xlabel='percentage of gait cycle [%]',
                     ylabel=r'joint moment $[\frac{N.mm}{kg}]$', y_axis_range=None, save_fig_as=None):
     df_copy = set_gait_cycle_percentage(df)
     min_cycle, med_cycle, max_cycle = get_min_med_max_cycles(df_copy)
@@ -86,7 +99,8 @@ def plot_moment_avg(df, plot_min_med_max=False, title='Knee joint moments', xlab
         ax1.plot(xvec, moment_avg, label='Average')
     else:
         ax1.plot(xvec, moment_avg)
-    ax1.set_title(title)
+    if title is not None:
+        ax1.set_title(title)
     ax1.set_xlabel(xlabel)
     ax1.set_ylabel(ylabel)
 
@@ -110,7 +124,7 @@ def plot_moment_avg(df, plot_min_med_max=False, title='Knee joint moments', xlab
     return fig
 
 
-def plot_muscle_average(df, muscle_list=None, plot_min_med_max=False, title='EMG Muscle Activity',
+def plot_muscle_average(df, muscle_list=None, plot_min_med_max=False, title=None,
                         ylabel='EMG amplitude', y_axis_range=None, save_fig_as=None, plot_max_emg=False):
     df_copy = set_gait_cycle_percentage(df)
 
@@ -125,7 +139,8 @@ def plot_muscle_average(df, muscle_list=None, plot_min_med_max=False, title='EMG
     num_plots = len(muscle_list)
     fig, axs = plt.subplots(num_plots, 1, sharex=True, figsize=(7, 1.7 * num_plots), squeeze=False)
     fig.subplots_adjust(hspace=0.04)
-    fig.suptitle(title)
+    if title is not None:
+        fig.suptitle(title)
     fig.text(0.06, 0.5, ylabel, ha='right', va='center', rotation='vertical')
     for i, muscle in enumerate(muscle_list):
         trial_groups = [trial for _, trial in df_copy.groupby('Trial')]
@@ -187,6 +202,8 @@ def plot_muscle_average(df, muscle_list=None, plot_min_med_max=False, title='EMG
         fig.show()
     else:
         save_image_as(fig, './figures/emg_avg/', save_fig_as)
+
+    return fig
 
 
 def plot_cycle_time_quartile(df, title='Gait cycle distribution', save_fig_as=None):
