@@ -13,18 +13,18 @@ import ann_methods as ann
 # my_ann.train_lstm(model_name='LSTM_lookback5_valsplit02')
 # train_tuple, validation_tuple = ann.generate_lstm_samples(my_ann.train_dataset, look_back=5)
 
-run_from_cache = False
+run_from_cache = True
 
 # ----------------------------- Load data ------------------------------------------- #
 my_dm = dm.DataManager(r'C:\Users\Gunnar\Google Drive\Gunnar\MSThesis\Data')
-my_dm.update_data_structure()   # Uncomment if the data_structure.json needs updating
+# my_dm.update_data_structure()   # Uncomment if the data_structure.json needs updating
 if not run_from_cache:
-    my_dm.load_emg_and_torque('Subject01', '20190405', reload=True)
+    my_dm.load_emg_and_torque('Subject01', '20190405', reload=False)
     my_dm.load_emg_and_torque('Subject01', '20190603', reload=True)
-    my_dm.load_emg_and_torque('Subject02', '20190406', reload=True)
-    my_dm.load_emg_and_torque('Subject02', '20190608', reload=True)
+    my_dm.load_emg_and_torque('Subject02', '20190406', reload=False)
+    my_dm.load_emg_and_torque('Subject02', '20190608', reload=False)
     my_dm.load_emg_and_torque('Subject06', '20190429', reload=True)
-    my_dm.load_emg_and_torque('Subject06', '20190509', reload=True)
+    my_dm.load_emg_and_torque('Subject06', '20190509', reload=False)
 my_dm.load_pandas()
 
 # ----------------------------- Setup filtering parameters -------------------------- #
@@ -126,6 +126,15 @@ if not run_from_cache:
     subject06_20190509_set0 = update_df_w_muscle_set(muscle_full_set, muscle_full_set,
                                                      my_dm.list_of_pandas['20190509 Subject06 filtered_n_cut'])
 
+    subject01_20190603_set1 = update_df_w_muscle_set(muscle_full_set, muscle_set1,
+                                                     my_dm.list_of_pandas['20190603 Subject01 filtered_n_cut'])
+    subject01_all_set1 = pd.concat([subject01_20190405_set1, subject01_20190603_set1], ignore_index=True)
+    subject02_20190608_set1 = update_df_w_muscle_set(muscle_full_set, muscle_set1,
+                                                     my_dm.list_of_pandas['20190608 Subject02 filtered_n_cut'])
+    subject02_all_set1 = pd.concat([subject02_20190406_set1, subject02_20190608_set1], ignore_index=True)
+    subject06_all_set0 = pd.concat([subject06_20190429_set0, subject06_20190509_set0], ignore_index=True)
+    subject06_all_set1 = update_df_w_muscle_set(muscle_full_set, muscle_set1, subject06_all_set0)
+
 # subject06_wo_start_and_stop = my_dm.list_of_pandas['20190509 Subject06 filtered_n_cut'][
 #     ~my_dm.list_of_pandas['20190509 Subject06 filtered'].Trial.str.contains('WalkStop') &
 #     ~my_dm.list_of_pandas['20190509 Subject06 filtered'].Trial.str.contains('StartWalk')]
@@ -153,31 +162,99 @@ if not run_from_cache:
     subject02_20190608_set0.name = 'subject02_20190608_set0'
     subject06_20190429_set0.name = 'subject06_20190429_set0'
     subject06_20190509_set0.name = 'subject06_20190509_set0'
+
+    subject01_all_set1.name = 'subject01_all_set1'
+    subject02_all_set1.name = 'subject02_all_set1'
+    subject06_all_set0.name = 'subject06_all_set0'
+    subject06_all_set1.name = 'subject06_all_set1'
+
     my_dm.update_pandas(subject01_20190405_set1)
     my_dm.update_pandas(subject01_20190603_set0)
     my_dm.update_pandas(subject02_20190406_set1)
     my_dm.update_pandas(subject02_20190608_set0)
     my_dm.update_pandas(subject06_20190429_set0)
     my_dm.update_pandas(subject06_20190509_set0)
-    # my_dm.add_pandas(subject01_20190405_set1, name='subject01_20190405_set1')
-    # my_dm.add_pandas(subject01_20190603_set0, name='subject01_20190603_set0')
-    # my_dm.add_pandas(subject02_20190406_set1, name='subject02_20190406_set1')
-    # my_dm.add_pandas(subject02_20190608_set0, name='subject02_20190608_set0')
-    # my_dm.add_pandas(subject06_20190429_set0, name='subject06_20190429_set0')
-    # my_dm.add_pandas(subject06_20190509_set0, name='subject06_20190509_set0')
+
+    my_dm.update_pandas(subject01_all_set1)
+    my_dm.update_pandas(subject02_all_set1)
+    my_dm.update_pandas(subject06_all_set0)
+    my_dm.update_pandas(subject06_all_set1)
 
 # ----------------------------- Create or load ANN instance -------------------------- #
-# my_ann = ann.ANN(dataset=my_dm.list_of_pandas['subject01_20190405_set1'], spec_cache_code='subject01_20190405_set1')
+if run_from_cache:
+    subject01_20190405_set1_ann = ann.ANN(load_from_cache='201906262150_subject01_20190405_set1')
+    subject01_20190603_set0_ann = ann.ANN(load_from_cache='201906262245_subject01_20190603_set0')
+    subject02_20190406_set1_ann = ann.ANN(load_from_cache='201906262150_subject02_20190406_set1')
+    subject02_20190608_set0_ann = ann.ANN(load_from_cache='201906262150_subject02_20190608_set0')
+    subject06_20190429_set0_ann = ann.ANN(load_from_cache='201906262150_subject06_20190429_set0')
+    subject06_20190509_set0_ann = ann.ANN(load_from_cache='201906262150_subject06_20190509_set0')
+
+    subject01_all_set1_ann = ann.ANN(load_from_cache='201906272111_subject01_all_set1')
+    subject02_all_set1_ann = ann.ANN(load_from_cache='201906272111_subject02_all_set1')
+    subject06_all_set0_ann = ann.ANN(load_from_cache='201906272111_subject06_all_set0')
+    subject06_all_set1_ann = ann.ANN(load_from_cache='201907012053_subject06_all_set1')
+else:
+    subject01_20190405_set1_ann = ann.ANN(dataset=my_dm.list_of_pandas['subject01_20190405_set1'],
+                                          spec_cache_code='subject01_20190405_set1')
+    subject01_20190603_set0_ann = ann.ANN(dataset=my_dm.list_of_pandas['subject01_20190603_set0'],
+                                          spec_cache_code='subject01_20190603_set0')
+    subject02_20190406_set1_ann = ann.ANN(dataset=my_dm.list_of_pandas['subject02_20190406_set1'],
+                                          spec_cache_code='subject02_20190406_set1')
+    subject02_20190608_set0_ann = ann.ANN(dataset=my_dm.list_of_pandas['subject02_20190608_set0'],
+                                          spec_cache_code='subject02_20190608_set0')
+    subject06_20190429_set0_ann = ann.ANN(dataset=my_dm.list_of_pandas['subject06_20190429_set0'],
+                                          spec_cache_code='subject06_20190429_set0')
+    subject06_20190509_set0_ann = ann.ANN(dataset=my_dm.list_of_pandas['subject06_20190509_set0'],
+                                          spec_cache_code='subject06_20190509_set0')
+
+    subject01_all_set1_ann = ann.ANN(dataset=my_dm.list_of_pandas['subject01_all_set1'],
+                                     spec_cache_code='subject01_all_set1')
+    subject02_all_set1_ann = ann.ANN(dataset=my_dm.list_of_pandas['subject02_all_set1'],
+                                     spec_cache_code='subject02_all_set1')
+    subject06_all_set0_ann = ann.ANN(dataset=my_dm.list_of_pandas['subject06_all_set0'],
+                                     spec_cache_code='subject06_all_set0')
+    subject06_all_set1_ann = ann.ANN(dataset=my_dm.list_of_pandas['subject06_all_set1'],
+                                     spec_cache_code='subject06_all_set1')
 # my_ann = ann.ANN(dataset=my_dm.list_of_pandas['subject06_all_wo_ss_fullset'], spec_cache_code='06_all_wo_ss_fullset')
 # my_ann = ann.ANN()
 
+
 # ----------------------------- Analyze ANN datasets (e.g. train and test) ----------- #
-saf.plot_moment_avg(my_dm.list_of_pandas['subject01_20190405_set1'], plot_min_med_max=True)
-saf.plot_moment_avg(my_dm.list_of_pandas['subject01_20190603_set0'], plot_min_med_max=True)
-saf.plot_moment_avg(my_dm.list_of_pandas['subject02_20190406_set1'], plot_min_med_max=True)
-saf.plot_moment_avg(my_dm.list_of_pandas['subject02_20190608_set0'], plot_min_med_max=True)
-saf.plot_moment_avg(my_dm.list_of_pandas['subject06_20190429_set0'], plot_min_med_max=True)
-saf.plot_moment_avg(my_dm.list_of_pandas['subject06_20190509_set0'], plot_min_med_max=True)
+def analyzing_plots(df, title_spec=None, save_fig_as_spec=''):
+    saf.plot_moment_avg(df, title=title_spec, ylabel='normalized KJM', y_axis_range=(-0.6, 0.8),
+                        save_fig_as=save_fig_as_spec + '_moment_avg')
+    saf.plot_muscle_correlations(df, include_torque=True, save_fig_as=save_fig_as_spec + '_corr_heatmap')
+    saf.plot_muscle_average(df, ['RectFem', 'VasMed', 'VasLat'], y_axis_range=(0, 0.99),
+                            save_fig_as=save_fig_as_spec + '_emg_avg')
+
+
+analyzing_plots(subject01_all_set1_ann.train_dataset, save_fig_as_spec='subject01_all_set1')
+analyzing_plots(subject02_all_set1_ann.train_dataset, save_fig_as_spec='subject02_all_set1')
+analyzing_plots(subject06_all_set1_ann.train_dataset, save_fig_as_spec='subject06_all_set1')
+
+saf.plot_moment_avg(subject01_all_set1_ann.train_dataset, title='Subject01 Knee Joint Moments',
+                    ylabel='normalized moments', y_axis_range=(-0.6, 0.8), save_fig_as='subject01_all_set1_moment_avg')
+saf.plot_moment_avg(subject02_all_set1_ann.train_dataset, title='Subject02 Knee Joint Moments',
+                    ylabel='normalized moments', y_axis_range=(-0.6, 0.8), save_fig_as='subject02_all_set1_moment_avg')
+saf.plot_moment_avg(subject06_all_set0_ann.train_dataset, title='Subject06 Knee Joint Moments',
+                    ylabel='normalized moments', y_axis_range=(-0.6, 0.8), save_fig_as='subject06_all_set0_moment_avg')
+
+saf.plot_cycle_time_quartile(subject01_all_set1_ann.train_dataset, title='Gait cycle duration quartile',
+                             save_fig_as='subject01_all_set1_cycle_duration_quartile')
+saf.plot_cycle_time_quartile(subject02_all_set1_ann.train_dataset, title='Gait cycle duration quartile',
+                             save_fig_as='subject02_all_set1_cycle_duration_quartile')
+saf.plot_cycle_time_quartile(subject06_all_set0_ann.train_dataset, title='Gait cycle duration quartile',
+                             save_fig_as='subject06_all_set1_cycle_duration_quartile')
+
+# saf.plot_muscle_average(subject01_20190603_set0_ann.train_dataset, ['RectFem', 'VasMed', 'VasLat'], y_lim=(0, 0.99),
+#                         plot_max_emg=True)
+
+analyzing_plots(subject01_20190405_set1_ann.train_dataset, title_spec='Subject01 20190405')
+analyzing_plots(subject01_20190603_set0_ann.train_dataset, title_spec='Subject01 20190603')
+analyzing_plots(subject02_20190406_set1_ann.train_dataset, title_spec='Subject02 20190406')
+analyzing_plots(subject02_20190608_set0_ann.train_dataset, title_spec='Subject02 20190608')
+analyzing_plots(subject06_20190429_set0_ann.train_dataset, title_spec='Subject06 20190429')
+analyzing_plots(subject06_20190509_set0_ann.train_dataset, title_spec='Subject06 20190509')
 
 # norm_values = my_ann.get_norm_values()
 # normalized_dataset = filt.real_time_normalize(my_ann.dataset, norm_values)
