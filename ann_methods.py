@@ -105,10 +105,7 @@ class ANN:
     def train_rnn_w_teacher_forcing(self, optimizer='rmsprop', model_name='mlp', layers_nodes=None, epochs=1000,
                                     val_split=0.2, early_stop_patience=None, dropout_rates=None):
         train_dataset = self.train_dataset.copy()
-        if 'Time' in train_dataset.columns:
-            train_dataset.pop('Time')
-        if 'Trial' in train_dataset.columns:
-            train_dataset.pop('Trial')
+        train_dataset.drop(columns=['Time', 'Trial'], errors='ignore', inplace=True)
 
         train_labels = train_dataset.pop('Torque')
         train_dataset['TeachForce'] = pd.Series(np.roll(train_labels.values, 1, axis=0))
@@ -161,8 +158,7 @@ class ANN:
     def train_lstm(self, optimizer='rmsprop', model_name='lstm', num_nodes=32, epochs=50, val_split=0.2,
                    early_stop_patience=None, dropout_rate=0.3, look_back=1, activation_func='tanh'):
         train_dataset = self.train_dataset.copy()
-        if 'Time' in train_dataset.columns:
-            train_dataset.pop('Time')
+        train_dataset.drop(columns=['Time'], errors='ignore', inplace=True)
 
         num_features = len(train_dataset.columns) - 2
 
@@ -241,10 +237,7 @@ class ANN:
     def train_mlp(self, optimizer='rmsprop', model_name='mlp', layers_nodes=None, epochs=1000, val_split=0.2,
                   early_stop_patience=None, dropout_rates=None):
         train_dataset = self.train_dataset.copy()
-        if 'Time' in train_dataset.columns:
-            train_dataset.pop('Time')
-        if 'Trial' in train_dataset.columns:
-            train_dataset.pop('Trial')
+        train_dataset.drop(columns=['Time', 'Trial'], errors='ignore', inplace=True)
 
         train_labels = train_dataset.pop('Torque')
         num_emg = len([x for x in train_dataset.columns if x not in ['Time', 'Torque', 'Trial']])
@@ -304,10 +297,7 @@ class ANN:
     def evaluate_model(self, model_name, lstm=False):
         test_dataset = self.test_dataset.copy()
         moment_avg = test_dataset.groupby('Time')['Torque'].mean()
-        if 'Time' in test_dataset.columns:
-            test_dataset.pop('Time')
-        if 'Trial' in test_dataset.columns:
-            test_dataset.pop('Trial')
+        test_dataset.drop(columns=['Time', 'Trial'], errors='ignore', inplace=True)
 
         test_labels = test_dataset.pop('Torque')
 
@@ -362,8 +352,7 @@ class ANN:
             cycles = list(test_set.groupby('Trial').apply(np.unique).index)
 
             trials = test_set.pop('Trial')
-            test_set.pop('Torque')
-            test_set.pop('Time')
+            test_set.drop(columns=['Time', 'Torque'], errors='ignore', inplace=True)
 
             K.set_session(self.model_sessions[model_name])
             with K.get_session().graph.as_default():
