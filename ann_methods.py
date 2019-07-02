@@ -29,6 +29,7 @@ class ANN:
             self.cache_path = ''
             self.create_cache_dir(spec_cache_code)
             self.dataset = dataset
+            self.normalized_dataset = pd.DataFrame()
             self.train_dataset = pd.DataFrame()
             self.test_dataset = pd.DataFrame()
             self.prepare_data()
@@ -93,6 +94,7 @@ class ANN:
                                                             norm_emg=True, norm_torque=True)
             self.train_dataset = filt.min_max_normalize_data(self.train_dataset, norm_emg=True, norm_torque=True)
 
+            self.normalized_dataset = pd.concat([self.train_dataset, self.test_dataset], ignore_index=True)
         self.save_datasets()
 
     def update_train_and_test(self, frac=0.8, randomize_by_trial=True, normalize=True):
@@ -101,6 +103,8 @@ class ANN:
             self.test_dataset = filt.min_max_normalize_data(self.test_dataset, secondary_df=self.train_dataset,
                                                             norm_emg=True, norm_torque=True)
             self.train_dataset = filt.min_max_normalize_data(self.train_dataset, norm_emg=True, norm_torque=True)
+
+            self.normalized_dataset = pd.concat([self.train_dataset, self.test_dataset], ignore_index=True)
 
     def train_rnn_w_teacher_forcing(self, optimizer='rmsprop', model_name='mlp', layers_nodes=None, epochs=1000,
                                     val_split=0.2, early_stop_patience=None, dropout_rates=None):
@@ -339,11 +343,13 @@ class ANN:
         self.dataset.to_pickle(self.cache_path + 'dataframes/dataset.pkl')
         self.test_dataset.to_pickle(self.cache_path + 'dataframes/test_dataset.pkl')
         self.train_dataset.to_pickle(self.cache_path + 'dataframes/train_dataset.pkl')
+        self.normalized_dataset.to_pickle(self.cache_path + 'dataframes/normalized_dataset.pkl')
 
     def load_datasets(self):
         self.dataset = pd.read_pickle(self.cache_path + 'dataframes/dataset.pkl')
         self.train_dataset = pd.read_pickle(self.cache_path + 'dataframes/train_dataset.pkl')
         self.test_dataset = pd.read_pickle(self.cache_path + 'dataframes/test_dataset.pkl')
+        self.normalized_dataset = pd.read_pickle(self.cache_path + 'dataframes/normalized_dataset.pkl')
 
     def add_model_prediction(self, model_name):
         if model_name in self.model_sessions and model_name in self.models:
