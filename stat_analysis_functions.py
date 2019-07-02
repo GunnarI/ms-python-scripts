@@ -2,6 +2,8 @@ from deprecated import deprecated
 import os
 import logging
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mtick
+import matplotlib.gridspec as gridspec
 import numpy as np
 import seaborn as sns
 from scipy import signal as scisig
@@ -63,8 +65,8 @@ def plot_muscle_correlations(df, method='pearson', include_torque=False, title=N
     return fig
 
 
-def plot_moment_avg(df, plot_min_med_max=False, title=None, xlabel='percentage of gait cycle [%]',
-                    ylabel=r'joint moment $[\frac{N.mm}{kg}]$', y_axis_range=None, save_fig_as=None):
+def plot_moment_avg(df, plot_min_med_max=False, title=None, xlabel=None,
+                    ylabel=None, y_axis_range=None, plot_font_size=12, save_fig_as=None):
     df_copy = set_gait_cycle_percentage(df)
     min_cycle, med_cycle, max_cycle = get_min_med_max_cycles(df_copy)
     fig = plt.figure(figsize=(8, 5))
@@ -101,11 +103,20 @@ def plot_moment_avg(df, plot_min_med_max=False, title=None, xlabel='percentage o
         ax1.plot(xvec, moment_avg)
     if title is not None:
         ax1.set_title(title)
-    ax1.set_xlabel(xlabel)
-    ax1.set_ylabel(ylabel)
+    if xlabel is not None:
+        ax1.set_xlabel(xlabel)
+    if ylabel is not None:
+        ax1.set_ylabel(ylabel)
 
     if y_axis_range is not None:
         ax1.set_ylim(y_axis_range[0], y_axis_range[1])
+
+    if plot_font_size is not None:
+        ax1.tick_params(labelsize=plot_font_size)
+
+    fmt = '%.0f%%'
+    xticks = mtick.FormatStrFormatter(fmt)
+    ax1.xaxis.set_major_formatter(xticks)
 
     if plot_min_med_max:
         print('The fastest cycles was: ' + min_cycle[0] + '\n\tTime steps: ' + str(min_cycle[1]))
@@ -124,11 +135,8 @@ def plot_moment_avg(df, plot_min_med_max=False, title=None, xlabel='percentage o
     return fig
 
 
-def plot_muscle_average(df, muscle_list=None, plot_min_med_max=False, title=None,
-                        ylabel='EMG amplitude', y_axis_range=None, save_fig_as=None, plot_max_emg=False):
+def plot_muscle_average(df, muscle_list=None, ylabel=None, y_axis_range=None, plot_font_size=12, save_fig_as=None,):
     df_copy = set_gait_cycle_percentage(df)
-
-    min_cycle, med_cycle, max_cycle = get_min_med_max_cycles(df_copy)
 
     if not muscle_list:
         muscle_list = list(df_copy)
@@ -136,68 +144,41 @@ def plot_muscle_average(df, muscle_list=None, plot_min_med_max=False, title=None
         muscle_list.remove('Torque')
         muscle_list.remove('Trial')
 
-    num_plots = len(muscle_list)
-    fig, axs = plt.subplots(num_plots, 1, sharex=True, figsize=(7, 1.7 * num_plots), squeeze=False)
-    fig.subplots_adjust(hspace=0.04)
-    if title is not None:
-        fig.suptitle(title)
-    fig.text(0.06, 0.5, ylabel, ha='right', va='center', rotation='vertical')
-    for i, muscle in enumerate(muscle_list):
-        trial_groups = [trial for _, trial in df_copy.groupby('Trial')]
-        xvec = np.arange(0, 101)
-        num_steps = len(xvec)
-        emg_vec = np.zeros((len(trial_groups), num_steps))
-        for j, df in enumerate(trial_groups):
-            emg_vec[j, :] = resample_signal(df[muscle], num_steps)
-            if plot_min_med_max:
-                min_cycle_xvec = xvec
-                med_cycle_xvec = xvec
-                max_cycle_xvec = xvec
+    fig = plt.figure(figsize=(8, 5))
+    ax1 = plt.subplot()
 
-                if df.iloc[0]['Trial'] == min_cycle[0]:
-                    min_cycle_emg = emg_vec[j, :]
-                elif df.iloc[0]['Trial'] == med_cycle[0]:
-                    med_cycle_emg = emg_vec[j, :]
-                elif df.iloc[0]['Trial'] == max_cycle[0]:
-                    max_cycle_emg = emg_vec[j, :]
+    if muscle_list is not None:
+        colors = ['red', 'green', 'cyan', 'yellow']
+        if ylabel is not None:
+            ax1.set_ylabel(ylabel)
+        for i, muscle in enumerate(muscle_list):
+            trial_groups = [trial for _, trial in df_copy.groupby('Trial')]
+            xvec = np.arange(0, 101)
+            num_steps = len(xvec)
+            emg_vec = np.zeros((len(trial_groups), num_steps))
+            for j, df in enumerate(trial_groups):
+                emg_vec[j, :] = resample_signal(df[muscle], num_steps)
+            emg_avg = np.mean(emg_vec, axis=0)
+            emg_std = np.std(emg_vec, axis=0)
 
-            if plot_max_emg:
-                max_emg_xvec = xvec
+            std_range = (emg_avg - emg_std, emg_avg + emg_std)
 
-                if df.iloc[0]['Trial'] == df_copy.loc[df_copy[muscle].idxmax()]['Trial']:
-                    max_emg = emg_vec[j, :]
+            ax1.fill_between(xvec, std_range[0], std_range[1], color=colors[i], alpha=0.2)
+            ax1.plot(xvec, emg_avg, color=colors[i], label=muscle)
 
-        emg_avg = np.mean(emg_vec, axis=0)
-        emg_std = np.std(emg_vec, axis=0)
+    if y_axis_range is not None:
+        ax1.set_ylim(y_axis_range[0], y_axis_range[1])
 
-        std_range = (emg_avg - emg_std, emg_avg + emg_std)
+    if plot_font_size is not None:
+        ax1.tick_params(labelsize=plot_font_size)
 
-        axs[i, 0] = plt.subplot(num_plots, 1, i + 1)
-        axs[i, 0].fill_between(xvec, std_range[0], std_range[1], alpha=0.2)
-        axs[i, 0].plot(xvec, emg_avg, label='Average')
-        axs[i, 0].set_xlabel('Percentage of gait cycle [%]')
+    ax1.legend(fontsize=plot_font_size)
 
-        if plot_min_med_max:
-            axs[i, 0].plot(min_cycle_xvec, min_cycle_emg, label='Fastest cycle')
-            axs[i, 0].plot(med_cycle_xvec, med_cycle_emg, label='Slowest cycle')
-            axs[i, 0].plot(max_cycle_xvec, max_cycle_emg, label='Median cycle')
+    fmt = '%.0f%%'
+    xticks = mtick.FormatStrFormatter(fmt)
+    ax1.xaxis.set_major_formatter(xticks)
 
-        if plot_max_emg:
-            max_trial = df_copy.loc[df_copy[muscle].idxmax()]['Trial']
-            print('The trial with maximum signal for muscle ' + muscle + ': ' + max_trial)
-            axs[i, 0].plot(max_emg_xvec, max_emg, label='Muscle max value')
-
-        if y_axis_range is None:
-            axs[i, 0].set_ylim(0, 0.99)
-        else:
-            axs[i, 0].set_ylim(y_axis_range[0], y_axis_range[1])
-        axs[i, 0].set_yticks(np.arange(y_axis_range[0], y_axis_range[1], 0.2))
-        axs[i, 0].text(0.72, 0.95, muscle, size='large', ha='left', va='top', transform=axs[i, 0].transAxes)
-
-    if plot_min_med_max:
-        handles, labels = axs[0, 0].get_legend_handles_labels()
-        fig.legend(handles, labels, loc='upper right')
-
+    fig.add_subplot(ax1)
     if not save_fig_as:
         fig.show()
     else:
@@ -359,6 +340,69 @@ def set_gait_cycle_percentage(df):
     return_df['Percentage'] = percentage_list
 
     return return_df
+
+
+def plot_grid_emg_average(dfs_list, row_names, col_names, muscle_lists=None, ylabel=None, y_axis_range=None,
+                          plot_font_size=12, save_fig_as=None,):
+    if muscle_lists is None:
+        muscle_lists = [['RectFem', 'VasMed', 'VasLat'], ['BicFem', 'Semitend'], ['GlutMax'],
+                        ['TibAnt', 'Soleus', 'GasMed', 'GasLat']]
+    num_row = len(row_names)
+    num_col = len(col_names)
+    if len(dfs_list) != num_col:
+        logging.error('The number of column names is not equal to number of subjects dataframes')
+    if len(muscle_lists) != num_row:
+        logging.error('The number of row names is not equal to number of muscle groups')
+
+    fig, axes = plt.subplots(nrows=num_row, ncols=num_col, figsize=(11.69, 8.27), sharex=True, sharey=True,
+                             squeeze=False)
+    fig.subplots_adjust(hspace=0.04, wspace=0.04)
+
+    for n, subject in enumerate(dfs_list):
+        df_copy = subject.copy()
+
+        for m, muscle_list in enumerate(muscle_lists):
+            if muscle_list is not None:
+                colors = ['red', 'green', 'cyan', 'yellow']
+                if ylabel is not None:
+                    axes[m, n].set_ylabel(ylabel)
+                for i, muscle in enumerate(muscle_list):
+                    trial_groups = [trial for _, trial in df_copy.groupby('Trial')]
+                    xvec = np.arange(0, 101)
+                    num_steps = len(xvec)
+                    emg_vec = np.zeros((len(trial_groups), num_steps))
+                    for j, df in enumerate(trial_groups):
+                        emg_vec[j, :] = resample_signal(df[muscle], num_steps)
+                    emg_avg = np.mean(emg_vec, axis=0)
+                    emg_std = np.std(emg_vec, axis=0)
+
+                    std_range = (emg_avg - emg_std, emg_avg + emg_std)
+
+                    axes[m, n].fill_between(xvec, std_range[0], std_range[1], color=colors[i], alpha=0.2)
+                    axes[m, n].plot(xvec, emg_avg, color=colors[i], label=muscle)
+
+            if m == 0:
+                axes[m, n].set_title(col_names[n], fontsize=plot_font_size)
+            if n == 0:
+                axes[m, n].set_ylabel(row_names[m], fontsize=plot_font_size)
+
+            if y_axis_range is not None:
+                axes[m, n].set_ylim(y_axis_range[0], y_axis_range[1])
+
+            if plot_font_size is not None:
+                axes[m, n].tick_params(labelsize=plot_font_size)
+
+            if n == num_col - 1:
+                axes[m, n].legend(fontsize=plot_font_size, loc='upper right')
+
+            fmt = '%.0f%%'
+            xticks = mtick.FormatStrFormatter(fmt)
+            axes[m, n].xaxis.set_major_formatter(xticks)
+
+    if not save_fig_as:
+        fig.show()
+    else:
+        save_image_as(fig, './figures/emg_avg/', save_fig_as)
 
 
 def resample_signal(signal, new_sample_length):
