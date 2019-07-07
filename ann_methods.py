@@ -159,7 +159,47 @@ class ANN:
 
         self.save_model(model, model_name)
 
-    def train_lstm(self, optimizer='rmsprop', model_name='lstm', num_nodes=32, epochs=50, val_split=0.2,
+    def train_lstm(self, optimizer='rmsprop', model_name='lstm', num_nodes=32, epochs=100, val_split=0.2,
+                       early_stop_patience=None, dropout_rate=0.3, look_back=3, activation_func='relu'):
+        x_train, y_train = gen_lstm_dataset(self.train_dataset.copy(), look_back)
+
+        num_features = x_train.shape[2]
+
+        K.clear_session()
+
+        model = keras.Sequential()
+        model.add(layers.LSTM(num_nodes, input_shape=(look_back, num_features),
+                              activation=activation_func, dropout=dropout_rate))
+        model.add(layers.Dense(1))
+
+        if optimizer == 'rmsprop':
+            optimizer = optimizers.RMSprop()
+        elif optimizer == 'adam':
+            optimizer = optimizers.Adam()
+
+        model.compile(loss='mean_squared_error',
+                      optimizer=optimizer,
+                      metrics=['mean_absolute_error', 'mean_squared_error'])
+
+        callbacks = []
+        if early_stop_patience is not None:
+            if not isinstance(early_stop_patience, int):
+                warnings.warn('The val_patience should be an integer representing epoch patience of early stopping')
+            else:
+                callbacks.append(keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop_patience))
+
+        callbacks.append(keras.callbacks.CSVLogger(self.cache_path + 'history/' + model_name + '.log',
+                                                   separator=',', append=False))
+        callbacks.append(keras.callbacks.TensorBoard(log_dir=self.cache_path + 'tensorboard/' + model_name))
+        callbacks.append(keras.callbacks.ModelCheckpoint(self.cache_path + 'models/' + model_name + '_best.h5',
+                                                         save_best_only=True))
+
+        model.fit(x_train, y_train, epochs=epochs, verbose=1, validation_split=val_split, callbacks=callbacks)
+
+        self.save_model(model, model_name)
+        self.load_models(model_name=model_name + '_best')
+
+    def train_lstm_old(self, optimizer='rmsprop', model_name='lstm', num_nodes=32, epochs=50, val_split=0.2,
                    early_stop_patience=None, dropout_rate=0.3, look_back=1, activation_func='tanh'):
         train_dataset = self.train_dataset.copy()
         train_dataset.drop(columns=['Time'], errors='ignore', inplace=True)
@@ -238,7 +278,7 @@ class ANN:
 
         self.save_model(model, model_name)
 
-    def train_mlp(self, optimizer='rmsprop', model_name='mlp', layers_nodes=None, epochs=1000, val_split=0.2,
+    def train_mlp(self, optimizer='rmsprop', model_name='mlp', layers_nodes=None, epochs=100, val_split=0.2,
                   early_stop_patience=None, dropout_rates=None):
         train_dataset = self.train_dataset.copy()
         train_dataset.drop(columns=['Time', 'Trial'], errors='ignore', inplace=True)
@@ -248,10 +288,10 @@ class ANN:
 
         if layers_nodes is None:
             layers_nodes = [(64, 'relu'), (64, 'relu')]
-
-        if len(dropout_rates) != len(layers_nodes):
-            warnings.warn('Number of dropout rates did not match layers and is thus excluded from the model')
-            dropout_rates = None
+        if dropout_rates is not None:
+            if len(dropout_rates) != len(layers_nodes):
+                warnings.warn('Number of dropout rates did not match layers and is thus excluded from the model')
+                dropout_rates = None
 
         K.clear_session()
 
@@ -297,22 +337,20 @@ class ANN:
             callbacks=callbacks)
 
         self.save_model(model, model_name)
+        self.load_models(model_name=model_name + '_best')
 
-    def evaluate_model(self, model_name, lstm=False):
+    def evaluate_model(self, model_name, lstm=False, lstm_look_back=3):
         test_dataset = self.test_dataset.copy()
         moment_avg = test_dataset.groupby('Time')['Torque'].mean()
-        test_dataset.drop(columns=['Time', 'Trial'], errors='ignore', inplace=True)
 
-        test_labels = test_dataset.pop('Torque')
+        if lstm:
+            test_dataset, test_labels = gen_lstm_dataset(test_dataset, lstm_look_back)
+        else:
+            test_dataset.drop(columns=['Time', 'Trial'], errors='ignore', inplace=True)
+            test_labels = test_dataset.pop('Torque')
 
         if model_name in self.model_histories.keys():
             plot_history(self.model_histories[model_name])
-
-        if lstm:
-            test_dataset = np.array([test_dataset.values])
-            y = np.zeros((1, len(test_labels), 1))
-            y[0, :, 0] = test_labels.values
-            test_labels = y
 
         K.set_session(self.model_sessions[model_name])
         with K.get_session().graph.as_default():
@@ -402,35 +440,54 @@ class ANN:
                 print('Logger: ', history_path.stem, ' is empty')
                 continue
 
-    def plot_test(self, model_name, cycle_to_plot='random', lstm=False, title=None, save_fig_as=None):
+    def plot_test(self, model_name, cycle_to_plot='random', lstm=False, lstm_look_back=3, title=None, save_fig_as=None):
         dataset = self.test_dataset.copy()
         if cycle_to_plot == 'random':
-            cycle_to_plot = dataset.sample(n=1).Trial.to_string(index=False).strip()
-        test_cycle = dataset[dataset.Trial == cycle_to_plot]
-        test_time = test_cycle.pop('Time')
-        test_labels = test_cycle.pop('Torque')
-        test_trial = test_cycle.pop('Trial')
+            cycle_to_plot = [dataset.sample(n=1).Trial.to_string(index=False).strip()]
 
-        if lstm:
-            test_cycle = np.array([test_cycle.values])
+        prediction_mse = 0
+        time_vec = None
+        predictions = None
+        labels = None
+        if cycle_to_plot == 'worst':
+            cycle_to_plot = [cycle for cycle, _ in dataset.groupby('Trial')]
 
-        K.set_session(self.model_sessions[model_name])
-        with K.get_session().graph.as_default():
-            test_prediction = self.models[model_name].predict(test_cycle)
+        for cycle in cycle_to_plot:
+            test_cycle = dataset[dataset.Trial == cycle]
+            test_time = test_cycle.pop('Time')
 
-        if lstm:
-            test_prediction = test_prediction[0, :, 0]
+            if lstm:
+                test_cycle, test_labels = gen_lstm_dataset(test_cycle, lstm_look_back)
+                test_time = test_time[lstm_look_back-1:]
+            else:
+                test_cycle.drop(columns=['Time', 'Trial'], inplace=True, errors='ignore')
+                test_labels = test_cycle.pop('Torque')
+
+            K.set_session(self.model_sessions[model_name])
+            with K.get_session().graph.as_default():
+                test_prediction = self.models[model_name].predict(test_cycle)
+
+            if lstm:
+                test_prediction = test_prediction[:, 0]
+
+            temp_mse = np.square(np.subtract(test_labels, test_prediction)).mean()
+            if temp_mse > prediction_mse:
+                cycle_name = cycle
+                time_vec = test_time
+                predictions = test_prediction
+                labels = test_labels
+                prediction_mse = temp_mse
 
         if title is None:
-            title = cycle_to_plot
+            title = cycle_name
         fig = plt.figure(figsize=(8, 5))
         ax1 = plt.subplot()
         fig.add_subplot(ax1)
         ax1.set_title(title)
         ax1.set_xlabel('gait cycle duration[s]')
         ax1.set_ylabel('normalized joint moment')
-        ax1.plot(test_time, test_labels, label='Test cycle')
-        ax1.plot(test_time, test_prediction, label='Prediction')
+        ax1.plot(time_vec, labels, label='Test cycle')
+        ax1.plot(time_vec, predictions, label='Prediction')
         ax1.legend()
 
         if save_fig_as is None:
@@ -463,6 +520,36 @@ class ANN:
             fig.show()
         else:
             fig.savefig('./figures/ann/' + save_fig_as + '.png', bbox_inches='tight')
+
+
+def gen_lstm_dataset(df, look_back):
+    """
+    Prepares the dataset for training the LSTM depending on how many past timesteps should be used (i.e. look_back)
+    :param pandas.DataFrame df: A DataFrame dataset with all the emg data, with dimensions (num_timesteps, num_features)
+    :param int look_back: Number of past timesteps to look at for prediction
+    :return: A numpy.array containing the LSTM prepared dataset with dimensions (num_timesteps, look_back, num_features)
+    """
+    df_copy = df.copy()
+
+    inputs = list()
+    labels = list()
+
+    for _, trial_group in df_copy.groupby('Trial', sort=False):
+        trial_group.drop(columns=['Time', 'Trial'], errors='ignore', inplace=True)
+        group_labels = trial_group.pop('Torque')
+
+        group_inputs = trial_group.to_numpy(dtype=float)
+        group_labels = group_labels.to_numpy(dtype=float)
+
+        for i in range(len(group_labels)):
+            window_end = i + look_back
+            if window_end > len(group_labels):
+                break
+
+            inputs.append(group_inputs[i:window_end, :])
+            labels.append(group_labels[window_end-1])
+
+    return np.array(inputs), np.array(labels)
 
 
 def split_trials_by_duration(df, time_lim=None):
