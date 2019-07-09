@@ -67,13 +67,34 @@ class ANN:
         """
         dataset = self.dataset.copy()
         if randomize_by_trial:
-            trial_groups = dataset.groupby('Trial')
-            group_num = np.arange(trial_groups.ngroups)
-            np.random.shuffle(group_num)
+            fast_cycles = dataset[dataset['Trial'].str.contains('fast', case=False)]
+            slow_cycles = dataset[dataset['Trial'].str.contains('slow', case=False)]
+            normal_cycles = dataset.drop(fast_cycles.index)
+            normal_cycles = normal_cycles.drop(slow_cycles.index)
 
-            train_dataset = dataset[
-                trial_groups.ngroup().isin(group_num[:np.floor(frac * len(group_num) - 1).astype('int')])
+            fast_groups = fast_cycles.groupby('Trial')
+            slow_groups = slow_cycles.groupby('Trial')
+            normal_groups = normal_cycles.groupby('Trial')
+
+            fast_group_num = np.arange(fast_groups.ngroups)
+            slow_group_num = np.arange(slow_groups.ngroups)
+            normal_group_num = np.arange(normal_groups.ngroups)
+
+            np.random.shuffle(fast_group_num)
+            np.random.shuffle(slow_group_num)
+            np.random.shuffle(normal_group_num)
+
+            fast_dataset = fast_cycles[
+                fast_groups.ngroup().isin(fast_group_num[:np.floor(frac * len(fast_group_num) - 1).astype('int')])
             ]
+            slow_dataset = slow_cycles[
+                slow_groups.ngroup().isin(slow_group_num[:np.floor(frac * len(slow_group_num) - 1).astype('int')])
+            ]
+            normal_dataset = normal_cycles[
+                normal_groups.ngroup().isin(normal_group_num[:np.floor(frac * len(normal_group_num) - 1).astype('int')])
+            ]
+
+            train_dataset = pd.concat([fast_dataset, slow_dataset, normal_dataset])
 
             trial_groups = [df for _, df in train_dataset.groupby('Trial')]
             np.random.shuffle(trial_groups)
@@ -159,23 +180,30 @@ class ANN:
 
         self.save_model(model, model_name)
 
-    def train_lstm(self, optimizer='rmsprop', model_name='lstm', num_nodes=32, epochs=100, val_split=0.2,
-                       early_stop_patience=None, dropout_rate=0.3, look_back=3, activation_func='relu'):
+    def train_lstm(self, initializer='glorot_uniform', optimizer='rmsprop', learning_rate=None, model_name='lstm',
+                   num_nodes=32, epochs=100, val_split=0.2, early_stop_patience=None, dropout_rate=0.3, look_back=3,
+                   activation_func='relu'):
         x_train, y_train = gen_lstm_dataset(self.train_dataset.copy(), look_back)
 
         num_features = x_train.shape[2]
 
         K.clear_session()
 
-        model = keras.Sequential()
-        model.add(layers.LSTM(num_nodes, input_shape=(look_back, num_features),
-                              activation=activation_func, dropout=dropout_rate))
-        model.add(layers.Dense(1))
+        emg_inputs = keras.Input(shape=(look_back, num_features), name='emg')
+        x = layers.LSTM(num_nodes, activation=activation_func, dropout=dropout_rate, name='LSTM_layer')(emg_inputs)
+        prediction = layers.Dense(1, name='output_layer')(x)
+        model = keras.Model(inputs=emg_inputs, outputs=prediction, name=model_name)
 
         if optimizer == 'rmsprop':
-            optimizer = optimizers.RMSprop()
+            if learning_rate is not None:
+                optimizer = optimizers.RMSprop(lr=learning_rate)
+            else:
+                optimizer = optimizers.RMSprop()
         elif optimizer == 'adam':
-            optimizer = optimizers.Adam()
+            if learning_rate is not None:
+                optimizer = optimizers.Adam(lr=learning_rate)
+            else:
+                optimizer = optimizers.Adam()
 
         model.compile(loss='mean_squared_error',
                       optimizer=optimizer,
@@ -190,7 +218,9 @@ class ANN:
 
         callbacks.append(keras.callbacks.CSVLogger(self.cache_path + 'history/' + model_name + '.log',
                                                    separator=',', append=False))
-        callbacks.append(keras.callbacks.TensorBoard(log_dir=self.cache_path + 'tensorboard/' + model_name))
+        callbacks.append(keras.callbacks.TensorBoard(log_dir=self.cache_path + 'tensorboard/' + model_name,
+                                                     histogram_freq=5,
+                                                     write_grads=True))
         callbacks.append(keras.callbacks.ModelCheckpoint(self.cache_path + 'models/' + model_name + '_best.h5',
                                                          save_best_only=True))
 
@@ -440,17 +470,23 @@ class ANN:
                 print('Logger: ', history_path.stem, ' is empty')
                 continue
 
-    def plot_test(self, model_name, cycle_to_plot='random', lstm=False, lstm_look_back=3, title=None, save_fig_as=None):
-        dataset = self.test_dataset.copy()
+    def plot_test(self, model_name, cycle_to_plot='random', lstm=False, lstm_look_back=3, use_train_set=False,
+                  title=None, save_fig_as=None):
+        if use_train_set:
+            dataset = self.train_dataset.copy()
+        else:
+            dataset = self.test_dataset.copy()
         if cycle_to_plot == 'random':
             cycle_to_plot = [dataset.sample(n=1).Trial.to_string(index=False).strip()]
+        elif cycle_to_plot == 'worst':
+            cycle_to_plot = [cycle for cycle, _ in dataset.groupby('Trial')]
+        elif not isinstance(cycle_to_plot, list):
+            cycle_to_plot = [cycle_to_plot]
 
         prediction_mse = 0
         time_vec = None
         predictions = None
         labels = None
-        if cycle_to_plot == 'worst':
-            cycle_to_plot = [cycle for cycle, _ in dataset.groupby('Trial')]
 
         for cycle in cycle_to_plot:
             test_cycle = dataset[dataset.Trial == cycle]
@@ -473,6 +509,7 @@ class ANN:
             temp_mse = np.square(np.subtract(test_labels, test_prediction)).mean()
             if temp_mse > prediction_mse:
                 cycle_name = cycle
+                print(cycle_name)
                 time_vec = test_time
                 predictions = test_prediction
                 labels = test_labels
@@ -520,6 +557,47 @@ class ANN:
             fig.show()
         else:
             fig.savefig('./figures/ann/' + save_fig_as + '.png', bbox_inches='tight')
+
+    def get_test_prediction(self, model_name, cycle_to_predict='all', lstm=False, lstm_look_back=3):
+        dataset = self.test_dataset.copy()
+        if not cycle_to_predict == 'all':
+            if cycle_to_predict == 'random':
+                cycle_to_predict = [dataset.sample(n=1).Trial.to_string(index=False).strip()]
+            elif cycle_to_predict == 'worst':
+                cycle_to_predict = [cycle for cycle, _ in dataset.groupby('Trial')]
+            elif not isinstance(cycle_to_predict, list):
+                cycle_to_predict = [cycle_to_predict]
+
+            test_cycle = dataset[dataset.Trial == cycle_to_predict]
+        else:
+            test_cycle = dataset.copy()
+
+        if lstm:
+            test_cycle, test_labels = gen_lstm_dataset(test_cycle, lstm_look_back)
+        else:
+            test_cycle.drop(columns=['Time', 'Trial'], inplace=True, errors='ignore')
+            test_labels = test_cycle.pop('Torque')
+
+        K.set_session(self.model_sessions[model_name])
+        with K.get_session().graph.as_default():
+            test_prediction = self.models[model_name].predict(test_cycle)
+
+        if lstm:
+            test_prediction = test_prediction[:, 0]
+
+        if cycle_to_predict == 'all':
+            # dataset['Torque'] = test_prediction
+            df_to_return = []
+            for _, df in dataset.groupby('Trial'):
+                df_to_return.append(df[lstm_look_back-1:])
+            df_to_return = pd.concat(df_to_return)
+            df_to_return['Torque'] = test_prediction
+            # df_to_return = dataset
+        else:
+            df_to_return = dataset[dataset.Trial == cycle_to_predict]
+            df_to_return['Torque'] = test_prediction
+
+        return df_to_return
 
 
 def gen_lstm_dataset(df, look_back):
