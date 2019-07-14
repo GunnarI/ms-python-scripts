@@ -181,33 +181,78 @@ class ANN:
         self.save_model(model, model_name)
 
     def train_lstm(self, initializer='glorot_uniform', optimizer='rmsprop', learning_rate=None, model_name='lstm',
-                   num_nodes=32, epochs=100, val_split=0.2, early_stop_patience=None, dropout_rate=0.3, look_back=3,
-                   activation_func='relu'):
-        x_train, y_train = gen_lstm_dataset(self.train_dataset.copy(), look_back)
+                   num_nodes=32, epochs=100, val_split=0.2, early_stop_patience=None, dropout_rate=0.1,
+                   recurrent_dropout_rate=0.5, look_back=3, activation_func='relu', tensorboard=True,
+                   keep_training_model=False, initial_epoch=0, batch_size_case=1):
+        """
+        Trains a DNN based on a number of recurrent LSTM based layers and a single Dense output layer for regression.
+        The regression parameter represents the joint moment prediction from the emg input data.
+        :param str initializer: the weight initializer used for the keras LSTM layer (default 'glorot_uniform').
+        See https://keras.io/initializers/ \n
+        :param str optimizer: the optimizer used for the training, limited to 'rmsprop' or 'adam' (default 'rmsprop').
+        See https://keras.io/optimizers/ \n
+        :param float learning_rate: the learning rate used for the optimizer. If None then the internal default of the optimizer is used
+        :param str model_name: the name of the model as it will be saved in cache and self.models (default 'lstm').
+        :param int num_nodes: the number of hidden nodes in each unfolded LSTM layer (each timestep)
+        :param int epochs: number of epochs to run (default: 100). The number needs to be larger than initial_epoch (see initial_epoch).
+        :param float val_split: a percentage of dataset used as validation set, can be from 0 to 1 (default: 0.2)
+        :param int early_stop_patience: number of epochs used for the keras.callbacks.EarlyStopping, monitoring the validation loss (default: None)
+        :param float dropout_rate: float between 0 and 1. Fraction of the units to drop for the linear transformation of the inputs (default: 0.1).
+        :param float recurrent_dropout_rate: float between 0 and 1. Fraction of the units to drop for the linear transformation of the recurrent state (default: 0.3).
+        :param int look_back: number of timesteps to include for each sample input to the LSTM (default: 3).
+        :param str activation_func: the activation function used for the network (default: 'relu').
+        :param bool tensorboard: if True then tensorboard callback is used (default: True).
+        :param bool keep_training_model: if model_name already exists in cache and keep_training_model is True then training of the model continues from the point when it was cached (default: False).
+        :param int initial_epoch: the epoch number to start from (default: 0). If restarting training from cached model then this value should typically be the next epoch number from where the cached model stopped.
+        :param int batch_size_case: either 1 or 2 (default: 1). Case 1 makes all the cycles of equal length by zero padding and uses batch size as the length of these cycles
+        :return:
+        """
+        x_train, y_train, longest_cycle = gen_lstm_dataset(self.train_dataset.copy(), look_back,
+                                                           batch_size_case=batch_size_case)
 
+        if batch_size_case == 1:
+            batch_size = longest_cycle - look_back + 1
+        elif batch_size_case == 2:
+            batch_size = 1
+        else:
+            warnings.warn("batch_size_case should be either 1 or 2")
+            return
         num_features = x_train.shape[2]
 
         K.clear_session()
 
-        emg_inputs = keras.Input(shape=(look_back, num_features), name='emg')
-        x = layers.LSTM(num_nodes, activation=activation_func, dropout=dropout_rate, name='LSTM_layer')(emg_inputs)
-        prediction = layers.Dense(1, name='output_layer')(x)
-        model = keras.Model(inputs=emg_inputs, outputs=prediction, name=model_name)
-
-        if optimizer == 'rmsprop':
-            if learning_rate is not None:
-                optimizer = optimizers.RMSprop(lr=learning_rate)
+        if model_name in self.models:
+            if not keep_training_model:
+                warnings.warn("Model name already exists! Either change the name or set keep_training_model=True")
+                return
             else:
-                optimizer = optimizers.RMSprop()
-        elif optimizer == 'adam':
-            if learning_rate is not None:
-                optimizer = optimizers.Adam(lr=learning_rate)
-            else:
-                optimizer = optimizers.Adam()
+                if initial_epoch == 0:
+                    warnings.warn("initial_epoch=0")
 
-        model.compile(loss='mean_squared_error',
-                      optimizer=optimizer,
-                      metrics=['mean_absolute_error', 'mean_squared_error'])
+                K.set_session(self.model_sessions[model_name])
+                with K.get_session().graph.as_default():
+                    model = self.models[model_name]
+        else:
+            model = keras.Sequential()
+            model.add(layers.LSTM(num_nodes, input_shape=(look_back, num_features), kernel_initializer=initializer,
+                                  activation=activation_func, dropout=dropout_rate,
+                                  recurrent_dropout=recurrent_dropout_rate))
+            model.add(layers.Dense(1))
+
+            if optimizer == 'rmsprop':
+                if learning_rate is not None:
+                    optimizer = optimizers.RMSprop(lr=learning_rate)
+                else:
+                    optimizer = optimizers.RMSprop()
+            elif optimizer == 'adam':
+                if learning_rate is not None:
+                    optimizer = optimizers.Adam(lr=learning_rate)
+                else:
+                    optimizer = optimizers.Adam()
+
+            model.compile(loss='mean_squared_error',
+                          optimizer=optimizer,
+                          metrics=['mean_absolute_error', 'mean_squared_error'])
 
         callbacks = []
         if early_stop_patience is not None:
@@ -218,16 +263,42 @@ class ANN:
 
         callbacks.append(keras.callbacks.CSVLogger(self.cache_path + 'history/' + model_name + '.log',
                                                    separator=',', append=False))
-        callbacks.append(keras.callbacks.TensorBoard(log_dir=self.cache_path + 'tensorboard/' + model_name,
-                                                     histogram_freq=5,
-                                                     write_grads=True))
+        if tensorboard:
+            callbacks.append(keras.callbacks.TensorBoard(log_dir=self.cache_path + 'tensorboard/' + model_name,
+                                                         histogram_freq=5, write_grads=True))
         callbacks.append(keras.callbacks.ModelCheckpoint(self.cache_path + 'models/' + model_name + '_best.h5',
                                                          save_best_only=True))
 
-        model.fit(x_train, y_train, epochs=epochs, verbose=1, validation_split=val_split, callbacks=callbacks)
+        with K.get_session().graph.as_default():
+            model.fit(x_train, y_train, epochs=epochs, initial_epoch=initial_epoch, batch_size=batch_size, verbose=1,
+                      validation_split=val_split, callbacks=callbacks)
 
-        self.save_model(model, model_name)
+            self.save_model(model, model_name)
+
+            model_copy = keras.Sequential()
+            model_copy.add(layers.LSTM(num_nodes, batch_input_shape=(1, look_back, num_features),
+                                        activation=activation_func, dropout=dropout_rate))
+            model_copy.add(layers.Dense(1))
+            model_copy.compile(loss='mean_squared_error', optimizer=optimizer,
+                                metrics=['mean_absolute_error', 'mean_squared_error'])
+
+            self.save_model(model_copy, model_name + '_copy')
+
         self.load_models(model_name=model_name + '_best')
+
+        # TODO: Reconsider the use of model_copy, it is the same as model_best except maybe the session graph... but...
+        # the session graph could allow one to keep training from the point of best result rather than most recent.
+        K.set_session(self.model_sessions[model_name + '_best'])
+        with K.get_session().graph.as_default():
+            trained_weights = self.models[model_name + '_best'].get_weights()
+
+        K.clear_session()
+
+        K.set_session(self.model_sessions[model_name + '_copy'])
+        with K.get_session().graph.as_default():
+            model_copy = self.models[model_name + '_copy']
+            model_copy.set_weights(trained_weights)
+            self.save_model(model_copy, model_name + '_copy')
 
     def train_lstm_old(self, optimizer='rmsprop', model_name='lstm', num_nodes=32, epochs=50, val_split=0.2,
                    early_stop_patience=None, dropout_rate=0.3, look_back=1, activation_func='tanh'):
@@ -374,7 +445,7 @@ class ANN:
         moment_avg = test_dataset.groupby('Time')['Torque'].mean()
 
         if lstm:
-            test_dataset, test_labels = gen_lstm_dataset(test_dataset, lstm_look_back)
+            test_dataset, test_labels, _ = gen_lstm_dataset(test_dataset, lstm_look_back)
         else:
             test_dataset.drop(columns=['Time', 'Trial'], errors='ignore', inplace=True)
             test_labels = test_dataset.pop('Torque')
@@ -443,7 +514,11 @@ class ANN:
         self.model_sessions[model_name] = K.get_session()
         model.save(self.cache_path + 'models/' + model_name + '.h5')
         self.models[model_name] = model
-        self.model_histories[model_name] = pd.read_csv(self.cache_path + 'history/' + model_name + '.log',
+        if '_copy' in model_name:
+            model_hist_name = model_name.replace('_copy', '')
+        else:
+            model_hist_name = model_name
+        self.model_histories[model_name] = pd.read_csv(self.cache_path + 'history/' + model_hist_name + '.log',
                                                        sep=',',
                                                        engine='python')
 
@@ -490,10 +565,11 @@ class ANN:
 
         for cycle in cycle_to_plot:
             test_cycle = dataset[dataset.Trial == cycle]
+            test_cycle = test_cycle[test_cycle.Time >= 0.0]
             test_time = test_cycle.pop('Time')
 
             if lstm:
-                test_cycle, test_labels = gen_lstm_dataset(test_cycle, lstm_look_back)
+                test_cycle, test_labels, _ = gen_lstm_dataset(test_cycle, lstm_look_back)
                 test_time = test_time[lstm_look_back-1:]
             else:
                 test_cycle.drop(columns=['Time', 'Trial'], inplace=True, errors='ignore')
@@ -501,7 +577,7 @@ class ANN:
 
             K.set_session(self.model_sessions[model_name])
             with K.get_session().graph.as_default():
-                test_prediction = self.models[model_name].predict(test_cycle)
+                test_prediction = self.models[model_name].predict(test_cycle, batch_size=1)
 
             if lstm:
                 test_prediction = test_prediction[:, 0]
@@ -573,7 +649,7 @@ class ANN:
             test_cycle = dataset.copy()
 
         if lstm:
-            test_cycle, test_labels = gen_lstm_dataset(test_cycle, lstm_look_back)
+            test_cycle, test_labels, _ = gen_lstm_dataset(test_cycle, lstm_look_back)
         else:
             test_cycle.drop(columns=['Time', 'Trial'], inplace=True, errors='ignore')
             test_labels = test_cycle.pop('Torque')
@@ -600,11 +676,12 @@ class ANN:
         return df_to_return
 
 
-def gen_lstm_dataset(df, look_back):
+def gen_lstm_dataset(df, look_back, batch_size_case=1):
     """
     Prepares the dataset for training the LSTM depending on how many past timesteps should be used (i.e. look_back)
     :param pandas.DataFrame df: A DataFrame dataset with all the emg data, with dimensions (num_timesteps, num_features)
     :param int look_back: Number of past timesteps to look at for prediction
+    :param int batch_size_case: if batch_size_case is 1 it indicates that the cycles should be zero padded as the batch size will be the length of the cycle, in which case they all need to be of equal length (default: 1)
     :return: A numpy.array containing the LSTM prepared dataset with dimensions (num_timesteps, look_back, num_features)
     """
     df_copy = df.copy()
@@ -612,8 +689,12 @@ def gen_lstm_dataset(df, look_back):
     inputs = list()
     labels = list()
 
+    longest_cycle = df_copy.groupby('Trial')['Torque'].count().max(level=0).max()
+
     for _, trial_group in df_copy.groupby('Trial', sort=False):
         trial_group.drop(columns=['Time', 'Trial'], errors='ignore', inplace=True)
+        if batch_size_case == 1:
+            trial_group = zero_pad_dataset(trial_group, longest_cycle)
         group_labels = trial_group.pop('Torque')
 
         group_inputs = trial_group.to_numpy(dtype=float)
@@ -627,7 +708,27 @@ def gen_lstm_dataset(df, look_back):
             inputs.append(group_inputs[i:window_end, :])
             labels.append(group_labels[window_end-1])
 
-    return np.array(inputs), np.array(labels)
+    return np.array(inputs), np.array(labels), longest_cycle
+
+
+def zero_pad_dataset(df, target_len, smooth_transition=True):
+    return_df = df.copy()
+    return_df.drop(['Time', 'Trial'], axis=1, inplace=True, errors='ignore')
+    rows, columns = return_df.shape
+    lines_to_add = target_len - rows
+    data_to_pad = np.zeros((lines_to_add, columns))
+    if smooth_transition:
+        first_line = return_df.iloc[[0]].to_numpy()
+        current_row = np.true_divide(first_line, 2)
+        i = len(data_to_pad) - 1
+        while np.any(np.abs(current_row) > 0.0001) and i >= 0:
+            data_to_pad[i] = current_row
+            current_row = np.true_divide(current_row, 2)
+            i = i - 1
+
+    return_df = pd.concat([pd.DataFrame(data=data_to_pad, columns=return_df.columns), return_df],
+                          ignore_index=True)
+    return return_df
 
 
 def split_trials_by_duration(df, time_lim=None):
