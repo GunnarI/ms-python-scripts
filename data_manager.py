@@ -242,12 +242,12 @@ class DataManager:
             self.update_pandas(emg_df)
             self.update_pandas(torque_df)
 
-    def cut_data_to_cycles(self, df, name, t_round_decim=2):
+    def cut_data_to_cycles(self, df, name, t_round_decim=2, add_time=None):
         df_copy = df.copy()
 
         data_to_cache = []
         trial_names = []
-        # trial_col_loc = df_copy.columns.get_loc('Trial')
+
         for group, df in df_copy.groupby('Trial'):
             ids = group.split()
             df.pop('Trial')
@@ -258,7 +258,15 @@ class DataManager:
                 continue
             cycles_dict = self.gait_cycles_dict[group]['gait_cycles']
             for cycle in cycles_dict:
-                data_cycle = df.to_numpy()[(cycles_dict[cycle]['Start'] <= df.to_numpy()[:, 0]) &
+                if add_time is not None:
+                    if not type(add_time) == float:
+                        warnings.warn("add_time should be a float holding time in seconds")
+                        return
+                    start_time = cycles_dict[cycle]['Start'] - add_time
+                else:
+                    start_time = cycles_dict[cycle]['Start']
+
+                data_cycle = df.to_numpy()[(start_time <= df.to_numpy()[:, 0]) &
                                            (df.to_numpy()[:, 0] <= cycles_dict[cycle]['End'])]
                 data_cycle[:, 0] = (np.array(data_cycle[:, 0]).astype(dtype=float) -
                                     cycles_dict[cycle]['Start']).round(decimals=t_round_decim)
