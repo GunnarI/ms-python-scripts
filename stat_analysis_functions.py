@@ -67,7 +67,10 @@ def plot_muscle_correlations(df, method='pearson', include_torque=False, title=N
 
 def plot_moment_avg(df, plot_min_med_max=False, title=None, xlabel=None,
                     ylabel=None, y_axis_range=None, plot_font_size=12, save_fig_as=None):
-    df_copy = set_gait_cycle_percentage(df)
+    df_copy = df.copy()
+    df_copy = df_copy[df_copy.Time >= 0]
+    df_copy.reset_index(drop=True, inplace=True)
+
     min_cycle, med_cycle, max_cycle = get_min_med_max_cycles(df_copy)
     fig = plt.figure(figsize=(8, 5))
     ax1 = plt.subplot()
@@ -136,7 +139,9 @@ def plot_moment_avg(df, plot_min_med_max=False, title=None, xlabel=None,
 
 
 def plot_muscle_average(df, muscle_list=None, ylabel=None, y_axis_range=None, plot_font_size=12, save_fig_as=None,):
-    df_copy = set_gait_cycle_percentage(df)
+    df_copy = df.copy()
+    df_copy = df_copy[df_copy.Time >= 0]
+    df_copy.reset_index(drop=True, inplace=True)
 
     if not muscle_list:
         muscle_list = list(df_copy)
@@ -330,6 +335,8 @@ def plot_moment_derivative(df, plot_trial='average', muscle_list=None):
 
 def set_gait_cycle_percentage(df):
     return_df = df.copy()
+    return_df = return_df[return_df.Time >= 0]
+    return_df.reset_index(drop=True, inplace=True)
 
     percentage_list = []
     for _, group in return_df.groupby('Trial'):
