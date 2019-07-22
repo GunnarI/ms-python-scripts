@@ -20,7 +20,8 @@ import stat_analysis_functions as saf
 
 
 class ANN:
-    def __init__(self, dataset=None, spec_cache_code=None, load_from_cache=None, load_models=None):
+    def __init__(self, dataset=None, spec_cache_code=None, load_from_cache=None, load_models=None,
+                 train_dataset=None, test_dataset=None, normalize_data=True):
         self.models = {}
         self.model_histories = {}
         self.model_sessions = {}
@@ -32,8 +33,18 @@ class ANN:
             self.normalized_dataset = pd.DataFrame()
             self.train_dataset = pd.DataFrame()
             self.test_dataset = pd.DataFrame()
-            self.prepare_data()
+            self.prepare_data(normalize=normalize_data)
+        elif isinstance(train_dataset, pd.DataFrame) and isinstance(test_dataset, pd.DataFrame):
+            warnings.warn('When assigning datasets directly, they are not normalized or split automatically.')
+            self.cache_path = ''
+            self.create_cache_dir(spec_cache_code)
+            self.train_dataset = train_dataset
+            self.test_dataset = test_dataset
+            self.dataset = pd.concat([train_dataset, test_dataset], ignore_index=True)
+            self.normalized_dataset = self.dataset
+            self.save_datasets()
         else:
+
             if load_from_cache is None:
                 cached_folders = Path('./cache/ann/').glob('[0-9]*?*')
                 newest_cache = 0
@@ -52,7 +63,7 @@ class ANN:
                     for model_name in load_models:
                         self.load_models(model_name)
             else:
-                raise ValueError('A cache path for ' + load_from_cache + ' was not found')
+                raise ValueError('A cache path for ' + load_from_cache + ' was not found and no datasets given.')
 
     def create_train_and_test(self, frac=0.8, randomize_by_trial=True):
         """ Splits a pandas.DataFrame into train-, and test-dataset
@@ -127,86 +138,33 @@ class ANN:
 
             self.normalized_dataset = pd.concat([self.train_dataset, self.test_dataset], ignore_index=True)
 
-    def train_rnn_w_teacher_forcing(self, optimizer='rmsprop', model_name='mlp', layers_nodes=None, epochs=1000,
-                                    val_split=0.2, early_stop_patience=None, dropout_rates=None):
-        train_dataset = self.train_dataset.copy()
-        train_dataset.drop(columns=['Time', 'Trial'], errors='ignore', inplace=True)
-
-        train_labels = train_dataset.pop('Torque')
-        train_dataset['TeachForce'] = pd.Series(np.roll(train_labels.values, 1, axis=0))
-
-        if layers_nodes is None:
-            layers_nodes = [(64, 'relu'), (64, 'relu')]
-
-        if len(dropout_rates) != len(layers_nodes):
-            warnings.warn('Number of dropout rates did not match layers and is thus excluded from the model')
-            dropout_rates = None
-
-        model = keras.Sequential()
-        model.add(layers.Dense(layers_nodes[0][0], input_shape=[len(train_dataset.keys())]))
-        model.add(layers.Activation(layers_nodes[0][1]))
-        if dropout_rates is not None:
-            model.add(layers.Dropout(dropout_rates[0]))
-        for i, layer in enumerate(layers_nodes[1:]):
-            model.add(layers.Dense(layer[0]))
-            model.add(layers.Activation(layer[1]))
-            if dropout_rates is not None:
-                model.add(layers.Dropout(dropout_rates[i+1]))
-
-        model.add(layers.Dense(1))
-
-        if optimizer == 'rmsprop':
-            optimizer = optimizers.RMSprop()
-        elif optimizer == 'adam':
-            optimizer = optimizers.Adam()
-
-        model.compile(loss='mean_squared_error',
-                      optimizer=optimizer,
-                      metrics=['mean_absolute_error', 'mean_squared_error'])
-
-        callbacks = []
-        if early_stop_patience is not None:
-            if not isinstance(early_stop_patience, int):
-                warnings.warn('The val_patience should be an integer representing epoch patience of early stopping')
-            else:
-                callbacks.append(keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop_patience))
-
-        callbacks.append(keras.callbacks.CSVLogger(self.cache_path + 'history/' + model_name + '.log',
-                                                   separator=',', append=False))
-        model.fit(
-            train_dataset, train_labels, shuffle=False,
-            epochs=epochs, validation_split=val_split, verbose=1,
-            callbacks=callbacks)
-
-        self.save_model(model, model_name)
-
-    def train_lstm(self, initializer='glorot_uniform', optimizer='rmsprop', learning_rate=None, model_name='lstm',
-                   num_nodes=32, epochs=100, val_split=0.2, early_stop_patience=None, dropout_rate=0.1,
-                   recurrent_dropout_rate=0.5, look_back=3, activation_func='relu', tensorboard=True,
-                   keep_training_model=False, initial_epoch=0, batch_size_case=1):
+    def train_lstm_w_mlp(self, initializer='glorot_uniform', optimizer='rmsprop', learning_rate=None, model_name='lstm',
+                         num_nodes=32, epochs=100, val_split=0.2, early_stop_patience=None, dropout_rate=0.1,
+                         mlp_dropout_rate=0.1, recurrent_dropout_rate=0.5, look_back=3, activation_func='relu',
+                         tensorboard=True, keep_training_model=False, initial_epoch=0, batch_size_case=1):
         """
-        Trains a DNN based on a number of recurrent LSTM based layers and a single Dense output layer for regression.
-        The regression parameter represents the joint moment prediction from the emg input data.
-        :param str initializer: the weight initializer used for the keras LSTM layer (default 'glorot_uniform').
-        See https://keras.io/initializers/ \n
-        :param str optimizer: the optimizer used for the training, limited to 'rmsprop' or 'adam' (default 'rmsprop').
-        See https://keras.io/optimizers/ \n
-        :param float learning_rate: the learning rate used for the optimizer. If None then the internal default of the optimizer is used
-        :param str model_name: the name of the model as it will be saved in cache and self.models (default 'lstm').
-        :param int num_nodes: the number of hidden nodes in each unfolded LSTM layer (each timestep)
-        :param int epochs: number of epochs to run (default: 100). The number needs to be larger than initial_epoch (see initial_epoch).
-        :param float val_split: a percentage of dataset used as validation set, can be from 0 to 1 (default: 0.2)
-        :param int early_stop_patience: number of epochs used for the keras.callbacks.EarlyStopping, monitoring the validation loss (default: None)
-        :param float dropout_rate: float between 0 and 1. Fraction of the units to drop for the linear transformation of the inputs (default: 0.1).
-        :param float recurrent_dropout_rate: float between 0 and 1. Fraction of the units to drop for the linear transformation of the recurrent state (default: 0.3).
-        :param int look_back: number of timesteps to include for each sample input to the LSTM (default: 3).
-        :param str activation_func: the activation function used for the network (default: 'relu').
-        :param bool tensorboard: if True then tensorboard callback is used (default: True).
-        :param bool keep_training_model: if model_name already exists in cache and keep_training_model is True then training of the model continues from the point when it was cached (default: False).
-        :param int initial_epoch: the epoch number to start from (default: 0). If restarting training from cached model then this value should typically be the next epoch number from where the cached model stopped.
-        :param int batch_size_case: either 1 or 2 (default: 1). Case 1 makes all the cycles of equal length by zero padding and uses batch size as the length of these cycles
-        :return:
-        """
+                Trains a DNN based on a number of recurrent LSTM based layers and a single Dense output layer for regression.
+                The regression parameter represents the joint moment prediction from the emg input data.
+                :param str initializer: the weight initializer used for the keras LSTM layer (default 'glorot_uniform').
+                See https://keras.io/initializers/ \n
+                :param str optimizer: the optimizer used for the training, limited to 'rmsprop' or 'adam' (default 'rmsprop').
+                See https://keras.io/optimizers/ \n
+                :param float learning_rate: the learning rate used for the optimizer. If None then the internal default of the optimizer is used
+                :param str model_name: the name of the model as it will be saved in cache and self.models (default 'lstm').
+                :param int num_nodes: the number of hidden nodes in each unfolded LSTM layer (each timestep)
+                :param int epochs: number of epochs to run (default: 100). The number needs to be larger than initial_epoch (see initial_epoch).
+                :param float val_split: a percentage of dataset used as validation set, can be from 0 to 1 (default: 0.2)
+                :param int early_stop_patience: number of epochs used for the keras.callbacks.EarlyStopping, monitoring the validation loss (default: None)
+                :param float dropout_rate: float between 0 and 1. Fraction of the units to drop for the linear transformation of the inputs (default: 0.1).
+                :param float recurrent_dropout_rate: float between 0 and 1. Fraction of the units to drop for the linear transformation of the recurrent state (default: 0.3).
+                :param int look_back: number of timesteps to include for each sample input to the LSTM (default: 3).
+                :param str activation_func: the activation function used for the network (default: 'relu').
+                :param bool tensorboard: if True then tensorboard callback is used (default: True).
+                :param bool keep_training_model: if model_name already exists in cache and keep_training_model is True then training of the model continues from the point when it was cached (default: False).
+                :param int initial_epoch: the epoch number to start from (default: 0). If restarting training from cached model then this value should typically be the next epoch number from where the cached model stopped.
+                :param int batch_size_case: either 1 or 2 (default: 1). Case 1 makes all the cycles of equal length by zero padding and uses batch size as the length of these cycles
+                :return:
+                """
         x_train, y_train, longest_cycle = gen_lstm_dataset(self.train_dataset.copy(), look_back,
                                                            batch_size_case=batch_size_case)
 
@@ -233,11 +191,147 @@ class ANN:
                 with K.get_session().graph.as_default():
                     model = self.models[model_name]
         else:
-            model = keras.Sequential()
-            model.add(layers.LSTM(num_nodes, input_shape=(look_back, num_features), kernel_initializer=initializer,
-                                  activation=activation_func, dropout=dropout_rate,
-                                  recurrent_dropout=recurrent_dropout_rate))
-            model.add(layers.Dense(1))
+            emg_t_past = keras.Input(shape=(look_back, num_features), name='emg_t_past')
+            x = layers.LSTM(num_nodes, activation=activation_func, dropout=dropout_rate,
+                            recurrent_dropout=recurrent_dropout_rate, name='LSTM_layer')(emg_t_past)
+
+            emg_t_now = keras.Input(shape=(num_features,), name='emg_t_now')
+            current_timestep_dropout = layers.Dropout(mlp_dropout_rate)(emg_t_now)
+            current_timestep = layers.Dense(num_nodes, activation=activation_func,
+                                            name='mlp_current_timestep')(current_timestep_dropout)
+
+            x = layers.merge.concatenate([x, current_timestep])
+            prediction = layers.Dense(1, name='output_layer')(x)
+            model = keras.Model(inputs=[emg_t_past, emg_t_now], outputs=prediction, name=model_name)
+
+            print(model.summary())
+            keras.utils.plot_model(model, to_file=self.cache_path + 'diagrams/' + model_name + '.png')
+
+            if optimizer == 'rmsprop':
+                if learning_rate is not None:
+                    optimizer = optimizers.RMSprop(lr=learning_rate)
+                else:
+                    optimizer = optimizers.RMSprop()
+            elif optimizer == 'adam':
+                if learning_rate is not None:
+                    optimizer = optimizers.Adam(lr=learning_rate)
+                else:
+                    optimizer = optimizers.Adam()
+
+            model.compile(loss='mean_squared_error',
+                          optimizer=optimizer,
+                          metrics=['mean_absolute_error', 'mean_squared_error'])
+
+        callbacks = []
+        if early_stop_patience is not None:
+            if not isinstance(early_stop_patience, int):
+                warnings.warn('The val_patience should be an integer representing epoch patience of early stopping')
+            else:
+                callbacks.append(keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop_patience))
+
+        callbacks.append(keras.callbacks.CSVLogger(self.cache_path + 'history/' + model_name + '.log',
+                                                   separator=',', append=False))
+        if tensorboard:
+            callbacks.append(keras.callbacks.TensorBoard(log_dir=self.cache_path + 'tensorboard/' + model_name,
+                                                         histogram_freq=5, write_grads=True))
+        callbacks.append(keras.callbacks.ModelCheckpoint(self.cache_path + 'models/' + model_name + '_best.h5',
+                                                         save_best_only=True))
+
+        with K.get_session().graph.as_default():
+            model.fit({'emg_t_past': x_train, 'emg_t_now': x_train[:, -1]}, y_train, epochs=epochs,
+                      initial_epoch=initial_epoch, batch_size=batch_size, verbose=1,
+                      validation_split=val_split, callbacks=callbacks)
+
+            self.save_model(model, model_name)
+
+            try:
+                model_copy = keras.Model(inputs=[emg_t_past, emg_t_now], outputs=prediction, name=model_name)
+                model_copy.compile(loss='mean_squared_error', optimizer=optimizer,
+                                   metrics=['mean_absolute_error', 'mean_squared_error'])
+                self.save_model(model_copy, model_name + '_copy')
+            except NameError as error:
+                warnings.warn("Could not save model copy. Return NameError: " + str(error))
+                return
+
+        self.load_models(model_name=model_name + '_best')
+
+        # TODO: Reconsider the use of model_copy, it is the same as model_best except maybe the session graph... but...
+        # the session graph could allow one to keep training from the point of best result rather than most recent.
+        K.set_session(self.model_sessions[model_name + '_best'])
+        with K.get_session().graph.as_default():
+            trained_weights = self.models[model_name + '_best'].get_weights()
+
+        K.clear_session()
+
+        K.set_session(self.model_sessions[model_name + '_copy'])
+        with K.get_session().graph.as_default():
+            model_copy = self.models[model_name + '_copy']
+            model_copy.set_weights(trained_weights)
+            self.save_model(model_copy, model_name + '_copy')
+
+    def train_lstm(self, initializer='glorot_uniform', optimizer='rmsprop', learning_rate=None, model_name='lstm',
+                   num_nodes=32, epochs=100, val_split=0.2, early_stop_patience=None, dropout_rate=0.1,
+                   recurrent_dropout_rate=0.5, look_back=3, activation_func='relu', tensorboard=True,
+                   keep_training_model=False, initial_epoch=0, batch_size_case=1, use_test_as_val=False):
+        """
+        Trains a DNN based on a number of recurrent LSTM based layers and a single Dense output layer for regression.
+        The regression parameter represents the joint moment prediction from the emg input data.
+        :param str initializer: the weight initializer used for the keras LSTM layer (default 'glorot_uniform').
+        See https://keras.io/initializers/ \n
+        :param str optimizer: the optimizer used for the training, limited to 'rmsprop' or 'adam' (default 'rmsprop').
+        See https://keras.io/optimizers/ \n
+        :param float learning_rate: the learning rate used for the optimizer. If None then the internal default of the optimizer is used
+        :param str model_name: the name of the model as it will be saved in cache and self.models (default 'lstm').
+        :param int num_nodes: the number of hidden nodes in each unfolded LSTM layer (each timestep)
+        :param int epochs: number of epochs to run (default: 100). The number needs to be larger than initial_epoch (see initial_epoch).
+        :param float val_split: a percentage of dataset used as validation set, can be from 0 to 1 (default: 0.2)
+        :param int early_stop_patience: number of epochs used for the keras.callbacks.EarlyStopping, monitoring the validation loss (default: None)
+        :param float dropout_rate: float between 0 and 1. Fraction of the units to drop for the linear transformation of the inputs (default: 0.1).
+        :param float recurrent_dropout_rate: float between 0 and 1. Fraction of the units to drop for the linear transformation of the recurrent state (default: 0.3).
+        :param int look_back: number of timesteps to include for each sample input to the LSTM (default: 3).
+        :param str activation_func: the activation function used for the network (default: 'relu').
+        :param bool tensorboard: if True then tensorboard callback is used (default: True).
+        :param bool keep_training_model: if model_name already exists in cache and keep_training_model is True then training of the model continues from the point when it was cached (default: False).
+        :param int initial_epoch: the epoch number to start from (default: 0). If restarting training from cached model then this value should typically be the next epoch number from where the cached model stopped.
+        :param int batch_size_case: either 1 or 2 (default: 1). Case 1 makes all the cycles of equal length by zero padding and uses batch size as the length of these cycles
+        :return:
+        """
+        x_train, y_train, longest_cycle = gen_lstm_dataset(self.train_dataset.copy(), look_back,
+                                                           batch_size_case=batch_size_case)
+        if use_test_as_val:
+            x_val, y_val, _ = gen_lstm_dataset(self.test_dataset.copy(), look_back, batch_size_case=batch_size_case)
+            validation_set = (x_val, y_val)
+        else:
+            validation_set = None
+
+        if batch_size_case == 1:
+            batch_size = longest_cycle - look_back + 1
+        elif batch_size_case == 2:
+            batch_size = 1
+        else:
+            warnings.warn("batch_size_case should be either 1 or 2")
+            return
+        num_features = x_train.shape[2]
+
+        K.clear_session()
+
+        if model_name in self.models:
+            if not keep_training_model:
+                warnings.warn("Model name already exists! Either change the name or set keep_training_model=True")
+                return
+            else:
+                if initial_epoch == 0:
+                    warnings.warn("initial_epoch=0")
+
+                K.set_session(self.model_sessions[model_name])
+                with K.get_session().graph.as_default():
+                    model = self.models[model_name]
+        else:
+            emg_input = keras.Input(shape=(look_back, num_features), name='emg_input')
+            x = layers.LSTM(num_nodes, activation=activation_func, dropout=dropout_rate,
+                            recurrent_dropout=recurrent_dropout_rate, name='LSTM_layer')(emg_input)
+            prediction = layers.Dense(1, name='output_layer')(x)
+            model = keras.Model(inputs=emg_input, outputs=prediction, name=model_name)
 
             if optimizer == 'rmsprop':
                 if learning_rate is not None:
@@ -271,18 +365,18 @@ class ANN:
 
         with K.get_session().graph.as_default():
             model.fit(x_train, y_train, epochs=epochs, initial_epoch=initial_epoch, batch_size=batch_size, verbose=1,
-                      validation_split=val_split, callbacks=callbacks)
+                      validation_split=val_split, validation_data=validation_set, callbacks=callbacks)
 
             self.save_model(model, model_name)
 
-            model_copy = keras.Sequential()
-            model_copy.add(layers.LSTM(num_nodes, batch_input_shape=(1, look_back, num_features),
-                                        activation=activation_func, dropout=dropout_rate))
-            model_copy.add(layers.Dense(1))
-            model_copy.compile(loss='mean_squared_error', optimizer=optimizer,
-                                metrics=['mean_absolute_error', 'mean_squared_error'])
-
-            self.save_model(model_copy, model_name + '_copy')
+            try:
+                model_copy = keras.Model(inputs=emg_input, outputs=prediction, name=model_name)
+                model_copy.compile(loss='mean_squared_error', optimizer=optimizer,
+                                   metrics=['mean_absolute_error', 'mean_squared_error'])
+                self.save_model(model_copy, model_name + '_copy')
+            except NameError as error:
+                warnings.warn("Could not save model copy. Return NameError: " + str(error))
+                return
 
         self.load_models(model_name=model_name + '_best')
 
@@ -299,85 +393,6 @@ class ANN:
             model_copy = self.models[model_name + '_copy']
             model_copy.set_weights(trained_weights)
             self.save_model(model_copy, model_name + '_copy')
-
-    def train_lstm_old(self, optimizer='rmsprop', model_name='lstm', num_nodes=32, epochs=50, val_split=0.2,
-                   early_stop_patience=None, dropout_rate=0.3, look_back=1, activation_func='tanh'):
-        train_dataset = self.train_dataset.copy()
-        train_dataset.drop(columns=['Time'], errors='ignore', inplace=True)
-
-        num_features = len(train_dataset.columns) - 2
-
-        model = keras.Sequential()
-        model.add(layers.LSTM(num_nodes, return_sequences=True, input_shape=(None, num_features),
-                              activation=activation_func, dropout=dropout_rate))
-        model.add(layers.TimeDistributed(layers.Dense(1)))
-
-        if optimizer == 'rmsprop':
-            optimizer = optimizers.RMSprop()
-        elif optimizer == 'adam':
-            optimizer = optimizers.Adam()
-
-        model.compile(loss='mean_squared_error',
-                      optimizer=optimizer,
-                      metrics=['mean_absolute_error', 'mean_squared_error'])
-
-        callbacks = []
-        if early_stop_patience is not None:
-            if not isinstance(early_stop_patience, int):
-                warnings.warn('The val_patience should be an integer representing epoch patience of early stopping')
-            else:
-                callbacks.append(keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop_patience))
-
-        callbacks.append(keras.callbacks.CSVLogger(self.cache_path + 'history/' + model_name + '.log',
-                                                   separator=',', append=False))
-        callbacks.append(keras.callbacks.TensorBoard(log_dir=self.cache_path + 'tensorboard/' + model_name))
-
-        trial_groups = train_dataset.groupby('Trial')
-        group_num = np.arange(trial_groups.ngroups)
-        np.random.shuffle(group_num)
-
-        train_set = train_dataset[
-            trial_groups.ngroup().isin(group_num[:np.floor((1-val_split) * len(group_num) - 1).astype('int')])
-        ]
-
-        train_set = [df for _, df in train_set.groupby('Trial')]
-        drop_df = pd.concat(train_set)
-        validation_set = train_dataset.drop(drop_df.index)
-        validation_set = [df for _, df in validation_set.groupby('Trial')]
-        # train_group_list = list(train_dataset.groupby('Trial').groups.keys())
-
-        def train_generator():
-            i = 0
-            while True:
-                dataset = train_set[i].copy()
-                dataset.pop('Trial')
-                train_labels = dataset.pop('Torque')
-                x_train = np.array([dataset.values])
-                y_train = np.zeros((1, len(train_labels), 1))
-                y_train[0, :, 0] = train_labels.values
-
-                yield x_train, y_train
-
-        def val_generator():
-            j = 0
-            while True:
-                dataset = validation_set[j].copy()
-                dataset.pop('Trial')
-                validation_labels = dataset.pop('Torque')
-                x_train = np.array([dataset.values])
-                y_train = np.zeros((1, len(validation_labels), 1))
-                y_train[0, :, 0] = validation_labels.values
-
-                yield x_train, y_train
-
-        model.fit_generator(train_generator(), steps_per_epoch=len(train_set), epochs=epochs, verbose=1,
-                            validation_data=val_generator(), validation_steps=len(validation_set), callbacks=callbacks)
-        # model.fit(
-        #     train_dataset, train_labels,
-        #     batch_size=1, epochs=epochs, validation_split=val_split, verbose=1,
-        #     callbacks=callbacks)
-
-        self.save_model(model, model_name)
 
     def train_mlp(self, optimizer='rmsprop', model_name='mlp', layers_nodes=None, epochs=100, val_split=0.2,
                   early_stop_patience=None, dropout_rates=None):
@@ -440,12 +455,21 @@ class ANN:
         self.save_model(model, model_name)
         self.load_models(model_name=model_name + '_best')
 
-    def evaluate_model(self, model_name, lstm=False, lstm_look_back=3):
+    def plot_model_diagram(self, model_name):
+        K.set_session(self.model_sessions[model_name])
+        with K.get_session().graph.as_default():
+            print(self.models[model_name].summary())
+            keras.utils.plot_model(self.models[model_name], to_file=self.cache_path + 'diagrams/' + model_name + '.png')
+
+    def evaluate_model(self, model_name, lstm=False, lstm_look_back=3, lstm_w_mlp=False):
         test_dataset = self.test_dataset.copy()
         moment_avg = test_dataset.groupby('Time')['Torque'].mean()
 
         if lstm:
             test_dataset, test_labels, _ = gen_lstm_dataset(test_dataset, lstm_look_back)
+
+            if lstm_w_mlp:
+                test_dataset = {'emg_t_past': test_dataset, 'emg_t_now': test_dataset[:, -1]}
         else:
             test_dataset.drop(columns=['Time', 'Trial'], errors='ignore', inplace=True)
             test_labels = test_dataset.pop('Torque')
@@ -475,6 +499,7 @@ class ANN:
             os.mkdir(self.cache_path + 'models/')
             os.mkdir(self.cache_path + 'dataframes/')
             os.mkdir(self.cache_path + 'history/')
+            os.mkdir(self.cache_path + 'diagrams/')
         except FileExistsError:
             print('Cache directory ', self.cache_path, ' already exists')
 
@@ -545,8 +570,8 @@ class ANN:
                 print('Logger: ', history_path.stem, ' is empty')
                 continue
 
-    def plot_test(self, model_name, cycle_to_plot='random', lstm=False, lstm_look_back=3, use_train_set=False,
-                  title=None, save_fig_as=None):
+    def plot_test(self, model_name, cycle_to_plot='random', lstm=False, lstm_look_back=3, lstm_w_mlp=False,
+                  use_train_set=False, title=None, save_fig_as=None):
         if use_train_set:
             dataset = self.train_dataset.copy()
         else:
@@ -571,6 +596,9 @@ class ANN:
             if lstm:
                 test_cycle, test_labels, _ = gen_lstm_dataset(test_cycle, lstm_look_back)
                 test_time = test_time[lstm_look_back-1:]
+
+                if lstm_w_mlp:
+                    test_cycle = {'emg_t_past': test_cycle, 'emg_t_now': test_cycle[:, -1]}
             else:
                 test_cycle.drop(columns=['Time', 'Trial'], inplace=True, errors='ignore')
                 test_labels = test_cycle.pop('Torque')
@@ -591,6 +619,11 @@ class ANN:
                 labels = test_labels
                 prediction_mse = temp_mse
 
+
+        xvec = np.arange(0, 101)
+        labels = saf.resample_signal(labels, len(xvec))
+        predictions = saf.resample_signal(predictions, len(xvec))
+
         if title is None:
             title = cycle_name
         fig = plt.figure(figsize=(8, 5))
@@ -599,8 +632,8 @@ class ANN:
         ax1.set_title(title)
         ax1.set_xlabel('gait cycle duration[s]')
         ax1.set_ylabel('normalized joint moment')
-        ax1.plot(time_vec, labels, label='Test cycle')
-        ax1.plot(time_vec, predictions, label='Prediction')
+        ax1.plot(xvec, labels, label='Test cycle')
+        ax1.plot(xvec, predictions, label='Prediction')
         ax1.legend()
 
         if save_fig_as is None:
@@ -746,6 +779,61 @@ def split_trials_by_duration(df, time_lim=None):
     normal_walk = normal_walk.drop(slow_walk.index)
 
     return slow_walk, normal_walk, fast_walk
+
+
+def create_train_and_test(df, frac=0.8, randomize_by_trial=True):
+    """ Splits a pandas.DataFrame into train-, and test-dataset
+
+    :param df: The DataFrame
+    :param frac: The fraction of the DataFrame that will be used as training dataset, default: 0.8.
+    Note if randomize_by_trial=True then this is the fraction of trials/cycles used, where number of samples within
+    trial/cycle may vary
+    :param randomize_by_trial: If True then the split is done trial/cycle wise such that all samples within a trial
+    or cycle are put together into a dataset, default: True
+    :return: the two datasets for training and testing: train_dataset, test_dataset
+    """
+    dataset = df.copy()
+    if randomize_by_trial:
+        fast_cycles = dataset[dataset['Trial'].str.contains('fast', case=False)]
+        slow_cycles = dataset[dataset['Trial'].str.contains('slow', case=False)]
+        normal_cycles = dataset.drop(fast_cycles.index)
+        normal_cycles = normal_cycles.drop(slow_cycles.index)
+
+        fast_groups = fast_cycles.groupby('Trial')
+        slow_groups = slow_cycles.groupby('Trial')
+        normal_groups = normal_cycles.groupby('Trial')
+
+        fast_group_num = np.arange(fast_groups.ngroups)
+        slow_group_num = np.arange(slow_groups.ngroups)
+        normal_group_num = np.arange(normal_groups.ngroups)
+
+        np.random.shuffle(fast_group_num)
+        np.random.shuffle(slow_group_num)
+        np.random.shuffle(normal_group_num)
+
+        fast_dataset = fast_cycles[
+            fast_groups.ngroup().isin(fast_group_num[:np.floor(frac * len(fast_group_num) - 1).astype('int')])
+        ]
+        slow_dataset = slow_cycles[
+            slow_groups.ngroup().isin(slow_group_num[:np.floor(frac * len(slow_group_num) - 1).astype('int')])
+        ]
+        normal_dataset = normal_cycles[
+            normal_groups.ngroup().isin(normal_group_num[:np.floor(frac * len(normal_group_num) - 1).astype('int')])
+        ]
+
+        train_dataset = pd.concat([fast_dataset, slow_dataset, normal_dataset])
+
+        trial_groups = [df for _, df in train_dataset.groupby('Trial')]
+        np.random.shuffle(trial_groups)
+        train_dataset = pd.concat(trial_groups)
+    else:
+        train_dataset = dataset.sample(frac=frac, random_state=0)
+
+    test_dataset = dataset.drop(train_dataset.index)
+    train_dataset = train_dataset.reset_index(drop=True)
+    test_dataset = test_dataset.reset_index(drop=True)
+
+    return train_dataset, test_dataset
 
 
 def plot_history(hist):
