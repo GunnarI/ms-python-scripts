@@ -43,24 +43,17 @@ def get_max_emg_array(max_emg_values, max_emg_trial, emg_data, trial_id, trial_t
     return max_emg_values, max_emg_trial
 
 
-def save_np_dict_to_txt(dict_to_save, base_dir, data_fmt, headers=None):
-    for key in dict_to_save:
-        if headers:
-            np.savetxt(base_dir + key + '.txt', dict_to_save[key], fmt=data_fmt,
-                       header=' '.join(emg_id for emg_id in headers[key]), comments='')
-        else:
-            np.savetxt(base_dir + key + '.txt', dict_to_save[key], fmt=data_fmt)
-
-
-def min_max_normalize_data(df, secondary_df=None, norm_emg=True, norm_torque=False):
+def min_max_normalize_data(df, secondary_df=None, norm_emg=True, norm_torque=False, normalizer='z_score'):
     """Normalizes EMG data and/or torque data from pandas.DataFrame using sklearn.preprocessing.MinMaxScaler.
     If secondary_df is given then the scaling of the "primary" is done using the min and max from the "secondary"
     DataFrame. This is useful when scaling the test dataset.
 
-    :param df: The dataframe to scale
-    :param secondary_df: Dataframe to use for the min/max values, if None then the primary df is used (default: None)
-    :param norm_emg: If True then emg values in df are normalized (default: True)
-    :param norm_torque: If True then torque values in df are normalized (default: False)
+    :param pandas.DataFrame df: The dataframe to scale
+    :param pandas.DataFrame secondary_df: Dataframe to use for the min/max values, if None then the primary df is used
+    (default: None)
+    :param boolean norm_emg: If True then emg values in df are normalized (default: True)
+    :param boolean norm_torque: If True then torque values in df are normalized (default: False)
+    :param str normalizer: can be 'z_score' or 'min_max_scaler'
     :return: Dataframe with normalized values
     """
     return_df = df.copy()
@@ -76,7 +69,10 @@ def min_max_normalize_data(df, secondary_df=None, norm_emg=True, norm_torque=Fal
 
     if secondary_df is None:
         if norm_emg:
-            emg_scaler = preprocessing.MinMaxScaler(feature_range=(0, 1)).fit(emg)
+            if normalizer == 'z_score':
+                emg_scaler = preprocessing.StandardScaler().fit(emg)
+            elif normalizer == 'min_max_scaler':
+                emg_scaler = preprocessing.MinMaxScaler(feature_range=(0, 1)).fit(emg)
         if norm_torque:
             torque_scaler = preprocessing.MinMaxScaler(
                 feature_range=((torque.min()/torque.max()), 1)).fit(torque.to_numpy().reshape(-1, 1))
@@ -93,7 +89,10 @@ def min_max_normalize_data(df, secondary_df=None, norm_emg=True, norm_torque=Fal
         s_emg = scaling_df.to_numpy()
 
         if norm_emg:
-            emg_scaler = preprocessing.MinMaxScaler(feature_range=(0, 1)).fit(s_emg)
+            if normalizer == 'z_score':
+                emg_scaler = preprocessing.StandardScaler().fit(emg)
+            elif normalizer == 'min_max_scaler':
+                emg_scaler = preprocessing.MinMaxScaler(feature_range=(0, 1)).fit(s_emg)
         if norm_torque:
             torque_scaler = preprocessing.MinMaxScaler(
                 feature_range=((s_torque.min()/s_torque.max()), 1)).fit(s_torque.to_numpy().reshape(-1, 1))
