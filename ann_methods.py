@@ -360,6 +360,8 @@ class ANN:
         if tensorboard:
             callbacks.append(keras.callbacks.TensorBoard(log_dir=self.cache_path + 'tensorboard/' + model_name,
                                                          histogram_freq=5, write_grads=True))
+            if model_name not in self.models:
+                update_combined_bat(model_name, self.cache_path + 'tensorboard/')
         callbacks.append(keras.callbacks.ModelCheckpoint(self.cache_path + 'models/' + model_name + '_best.h5',
                                                          save_best_only=True))
 
@@ -500,6 +502,7 @@ class ANN:
             os.mkdir(self.cache_path + 'dataframes/')
             os.mkdir(self.cache_path + 'history/')
             os.mkdir(self.cache_path + 'diagrams/')
+            os.mkdir(self.cache_path + 'tensorboard/')
         except FileExistsError:
             print('Cache directory ', self.cache_path, ' already exists')
 
@@ -834,6 +837,17 @@ def create_train_and_test(df, frac=0.8, randomize_by_trial=True):
     test_dataset = test_dataset.reset_index(drop=True)
 
     return train_dataset, test_dataset
+
+
+def update_combined_bat(model_name, base_path):
+    if os.path.exists(base_path + 'combined.bat'):
+        string_to_add = ',' + model_name + ':"' + base_path + model_name + '"'
+        with open(base_path + 'combined.bat', 'a') as f:
+            f.write(string_to_add)
+    else:
+        string_to_add = 'tensorboard --logdir=' + model_name + ':"' + base_path + model_name + '"'
+        with open(base_path + 'combined.bat', 'w') as f:
+            f.write(string_to_add)
 
 
 def plot_history(hist):
