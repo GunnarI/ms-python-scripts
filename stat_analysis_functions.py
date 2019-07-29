@@ -65,7 +65,7 @@ def plot_muscle_correlations(df, method='pearson', include_torque=False, title=N
     return fig
 
 
-def plot_moment_avg(df, plot_min_med_max=False, title=None, xlabel=None,
+def plot_moment_avg(df, plot_min_med_max=False, plot_worst=False, title=None, xlabel=None,
                     ylabel=None, y_axis_range=None, plot_font_size=12, save_fig_as=None):
     df_copy = df.copy()
     df_copy = df_copy[df_copy.Time >= 0]
@@ -94,10 +94,20 @@ def plot_moment_avg(df, plot_min_med_max=False, title=None, xlabel=None,
             elif df.iloc[0]['Trial'] == max_cycle[0]:
                 max_cycle_moments = moments[i, :]
 
-        moment_avg = np.mean(moments, axis=0)
-        moment_std = np.std(moments, axis=0)
+    moment_avg = np.mean(moments, axis=0)
+    moment_std = np.std(moments, axis=0)
 
     std_range = (moment_avg - moment_std, moment_avg + moment_std)
+
+    if plot_worst:
+        mse = 0
+        for i, df in enumerate(trial_groups):
+            temp_mse = (np.square(moment_avg - moments[i, :])).mean()
+            if temp_mse > mse:
+                mse = temp_mse
+                worst_cycle = moments[i, :]
+                worst_cycle_name = df.Trial.iloc[0]
+                print(worst_cycle_name)
 
     ax1.fill_between(xvec, std_range[0], std_range[1], alpha=0.2)
     if plot_min_med_max:
@@ -121,9 +131,13 @@ def plot_moment_avg(df, plot_min_med_max=False, title=None, xlabel=None,
     xticks = mtick.FormatStrFormatter(fmt)
     ax1.xaxis.set_major_formatter(xticks)
 
+    if plot_worst:
+        print('The worst cycle was: ' + worst_cycle_name)
+        ax1.plot(xvec, worst_cycle, label='Worst cycle')
+
     if plot_min_med_max:
-        print('The fastest cycles was: ' + min_cycle[0] + '\n\tTime steps: ' + str(min_cycle[1]))
-        print('The slowest cycles was: ' + max_cycle[0] + '\n\tTime steps: ' + str(max_cycle[1]))
+        print('The fastest cycle was: ' + min_cycle[0] + '\n\tTime steps: ' + str(min_cycle[1]))
+        print('The slowest cycle was: ' + max_cycle[0] + '\n\tTime steps: ' + str(max_cycle[1]))
         ax1.plot(min_cycle_xvec, min_cycle_moments, label='Fastest cycle')
         ax1.plot(med_cycle_xvec, med_cycle_moments, label='Median cycle')
         ax1.plot(max_cycle_xvec, max_cycle_moments, label='Slowest cycle')
