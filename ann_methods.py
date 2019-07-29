@@ -2,6 +2,7 @@ import os
 import warnings
 
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mtick
 from pathlib import Path
 import pickle
 import time
@@ -65,7 +66,7 @@ class ANN:
             else:
                 raise ValueError('A cache path for ' + load_from_cache + ' was not found and no datasets given.')
 
-    def create_train_and_test(self, frac=0.8, randomize_by_trial=True):
+    def create_train_and_test(self, frac=0.8, randomize_by_trial=True, validation_frac=0.2):
         """ Splits a pandas.DataFrame into train-, and test-dataset
 
         :param df: The DataFrame
@@ -77,43 +78,8 @@ class ANN:
         :return: the two datasets for training and testing: train_dataset, test_dataset
         """
         dataset = self.dataset.copy()
-        if randomize_by_trial:
-            fast_cycles = dataset[dataset['Trial'].str.contains('fast', case=False)]
-            slow_cycles = dataset[dataset['Trial'].str.contains('slow', case=False)]
-            normal_cycles = dataset.drop(fast_cycles.index)
-            normal_cycles = normal_cycles.drop(slow_cycles.index)
+        train_dataset, test_dataset = split_df_by_frac(dataset, frac=0.8, randomize_by_trial=True)
 
-            fast_groups = fast_cycles.groupby('Trial')
-            slow_groups = slow_cycles.groupby('Trial')
-            normal_groups = normal_cycles.groupby('Trial')
-
-            fast_group_num = np.arange(fast_groups.ngroups)
-            slow_group_num = np.arange(slow_groups.ngroups)
-            normal_group_num = np.arange(normal_groups.ngroups)
-
-            np.random.shuffle(fast_group_num)
-            np.random.shuffle(slow_group_num)
-            np.random.shuffle(normal_group_num)
-
-            fast_dataset = fast_cycles[
-                fast_groups.ngroup().isin(fast_group_num[:np.floor(frac * len(fast_group_num) - 1).astype('int')])
-            ]
-            slow_dataset = slow_cycles[
-                slow_groups.ngroup().isin(slow_group_num[:np.floor(frac * len(slow_group_num) - 1).astype('int')])
-            ]
-            normal_dataset = normal_cycles[
-                normal_groups.ngroup().isin(normal_group_num[:np.floor(frac * len(normal_group_num) - 1).astype('int')])
-            ]
-
-            train_dataset = pd.concat([fast_dataset, slow_dataset, normal_dataset])
-
-            trial_groups = [df for _, df in train_dataset.groupby('Trial')]
-            np.random.shuffle(trial_groups)
-            train_dataset = pd.concat(trial_groups)
-        else:
-            train_dataset = dataset.sample(frac=frac, random_state=0)
-
-        test_dataset = dataset.drop(train_dataset.index)
         self.train_dataset = train_dataset.reset_index(drop=True)
         self.test_dataset = test_dataset.reset_index(drop=True)
 
@@ -270,9 +236,10 @@ class ANN:
             self.save_model(model_copy, model_name + '_copy')
 
     def train_lstm(self, initializer='glorot_uniform', optimizer='rmsprop', learning_rate=None, model_name='lstm',
-                   num_nodes=32, epochs=100, val_split=0.2, early_stop_patience=None, dropout_rate=0.1,
-                   recurrent_dropout_rate=0.5, look_back=3, activation_func='relu', tensorboard=True,
-                   keep_training_model=False, initial_epoch=0, batch_size_case=1, use_test_as_val=False):
+                   num_nodes=32, epochs=100, val_split=0.2, early_stop_patience=None, dropout_rate=0.1, l1_reg=0.01,
+                   l2_reg=0.01, recurrent_dropout_rate=0.5, look_back=3, activation_func='hard_sigmoid',
+                   recurrent_activation_func='hard_sigmoid', tensorboard=True, keep_training_model=False,
+                   initial_epoch=0, batch_size_case=1, use_test_as_val=False):
         """
         Trains a DNN based on a number of recurrent LSTM based layers and a single Dense output layer for regression.
         The regression parameter represents the joint moment prediction from the emg input data.
@@ -328,8 +295,10 @@ class ANN:
                     model = self.models[model_name]
         else:
             emg_input = keras.Input(shape=(look_back, num_features), name='emg_input')
-            x = layers.LSTM(num_nodes, activation=activation_func, dropout=dropout_rate,
-                            recurrent_dropout=recurrent_dropout_rate, name='LSTM_layer')(emg_input)
+            x = layers.LSTM(num_nodes, activation=activation_func, recurrent_activation=recurrent_activation_func,
+                            dropout=dropout_rate, recurrent_dropout=recurrent_dropout_rate,
+                            kernel_regularizer=keras.regularizers.l1_l2(l1=l1_reg, l2=l2_reg),
+                            name='LSTM_layer')(emg_input)
             prediction = layers.Dense(1, name='output_layer')(x)
             model = keras.Model(inputs=emg_input, outputs=prediction, name=model_name)
 
@@ -593,7 +562,7 @@ class ANN:
 
         for cycle in cycle_to_plot:
             test_cycle = dataset[dataset.Trial == cycle]
-            test_cycle = test_cycle[test_cycle.Time >= 0.0]
+            # test_cycle = test_cycle[test_cycle.Time >= 0.0]
             test_time = test_cycle.pop('Time')
 
             if lstm:
@@ -622,19 +591,24 @@ class ANN:
                 labels = test_labels
                 prediction_mse = temp_mse
 
-
-        xvec = np.arange(0, 101)
-        labels = saf.resample_signal(labels, len(xvec))
-        predictions = saf.resample_signal(predictions, len(xvec))
+        xvec = np.linspace(0, 100, num=len(labels))
+        # xvec = np.arange(0, 101)
+        # labels = saf.resample_signal(labels, len(xvec))
+        # predictions = saf.resample_signal(predictions, len(xvec))
 
         if title is None:
             title = cycle_name
         fig = plt.figure(figsize=(8, 5))
         ax1 = plt.subplot()
         fig.add_subplot(ax1)
+
+        fmt = '%.0f%%'
+        xticks = mtick.FormatStrFormatter(fmt)
+        ax1.xaxis.set_major_formatter(xticks)
+
         ax1.set_title(title)
-        ax1.set_xlabel('gait cycle duration[s]')
-        ax1.set_ylabel('normalized joint moment')
+        # ax1.set_xlabel('gait cycle duration[s]')
+        # ax1.set_ylabel('normalized joint moment')
         ax1.plot(xvec, labels, label='Test cycle')
         ax1.plot(xvec, predictions, label='Prediction')
         ax1.legend()
@@ -685,7 +659,7 @@ class ANN:
             test_cycle = dataset.copy()
 
         if lstm:
-            test_cycle, test_labels, _ = gen_lstm_dataset(test_cycle, lstm_look_back)
+            test_cycle, test_labels, _ = gen_lstm_dataset(test_cycle, lstm_look_back, batch_size_case=0)
         else:
             test_cycle.drop(columns=['Time', 'Trial'], inplace=True, errors='ignore')
             test_labels = test_cycle.pop('Torque')
@@ -784,23 +758,23 @@ def split_trials_by_duration(df, time_lim=None):
     return slow_walk, normal_walk, fast_walk
 
 
-def create_train_and_test(df, frac=0.8, randomize_by_trial=True):
-    """ Splits a pandas.DataFrame into train-, and test-dataset
+def split_df_by_frac(df, frac=0.8, randomize_by_trial=True):
+    """ Splits a pandas.DataFrame into two random sets based of a given fraction.
 
     :param df: The DataFrame
-    :param frac: The fraction of the DataFrame that will be used as training dataset, default: 0.8.
+    :param frac: The fraction of the DataFrame assigned to the first_dataset, default: 0.8.
     Note if randomize_by_trial=True then this is the fraction of trials/cycles used, where number of samples within
     trial/cycle may vary
     :param randomize_by_trial: If True then the split is done trial/cycle wise such that all samples within a trial
     or cycle are put together into a dataset, default: True
-    :return: the two datasets for training and testing: train_dataset, test_dataset
+    :return: the two datasets, first_dataset which is the bigger, and second_dataset the smaller
     """
     dataset = df.copy()
     if randomize_by_trial:
         fast_cycles = dataset[dataset['Trial'].str.contains('fast', case=False)]
         slow_cycles = dataset[dataset['Trial'].str.contains('slow', case=False)]
-        normal_cycles = dataset.drop(fast_cycles.index)
-        normal_cycles = normal_cycles.drop(slow_cycles.index)
+        normal_cycles = dataset.drop(index=fast_cycles.index)
+        normal_cycles = normal_cycles.drop(index=slow_cycles.index)
 
         fast_groups = fast_cycles.groupby('Trial')
         slow_groups = slow_cycles.groupby('Trial')
@@ -824,19 +798,17 @@ def create_train_and_test(df, frac=0.8, randomize_by_trial=True):
             normal_groups.ngroup().isin(normal_group_num[:np.floor(frac * len(normal_group_num) - 1).astype('int')])
         ]
 
-        train_dataset = pd.concat([fast_dataset, slow_dataset, normal_dataset])
+        first_dataset = pd.concat([fast_dataset, slow_dataset, normal_dataset])
 
-        trial_groups = [df for _, df in train_dataset.groupby('Trial')]
+        trial_groups = [df for _, df in first_dataset.groupby('Trial')]
         np.random.shuffle(trial_groups)
-        train_dataset = pd.concat(trial_groups)
+        first_dataset = pd.concat(trial_groups)
     else:
-        train_dataset = dataset.sample(frac=frac, random_state=0)
+        first_dataset = dataset.sample(frac=frac, random_state=0)
 
-    test_dataset = dataset.drop(train_dataset.index)
-    train_dataset = train_dataset.reset_index(drop=True)
-    test_dataset = test_dataset.reset_index(drop=True)
+    second_dataset = dataset.drop(first_dataset.index)
 
-    return train_dataset, test_dataset
+    return first_dataset, second_dataset
 
 
 def update_combined_bat(model_name, base_path):
