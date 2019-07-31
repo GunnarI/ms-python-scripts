@@ -29,10 +29,6 @@ if not run_from_cache:
     my_dm.load_emg_and_torque('Subject06', '20190509', reload=False)
 my_dm.load_pandas()
 
-train26_test1_all_set1_minmax_norm_ann = ann.ANN(load_from_cache='201907271708_train26_test1_all_set1_minmax_norm')
-train26_test1_all_set1_minmax_norm_ann.plot_test(model_name='LSTM_adam_64_02_05_00_00_20_relu_bc1', lstm=True,
-                                                 lstm_look_back=20, cycle_to_plot='20190405Walk17Cycle1')
-
 # ----------------------------- Setup filtering parameters -------------------------- #
 emg_lowcut = 10             # The lowpass cutoff frequency for EMG
 emg_highcut = 100           # The highpass cutoff frequency for EMG
@@ -220,195 +216,130 @@ else:
 norm_bool = input("Do normalization [y/N]:")
 if 'y' == norm_bool.lower() or 'yes' == norm_bool.lower():
     # Subject01
-    subject01_20190405_set1_minmax_norm = filt.min_max_normalize_data(my_dm.list_of_pandas['subject01_20190405_set1'],
-                                                                      normalizer='min_max_scaler',
-                                                                      norm_emg=True, norm_torque=True)
-    subject01_20190603_set1_minmax_norm = filt.min_max_normalize_data(my_dm.list_of_pandas['subject01_20190603_set1'],
-                                                                      normalizer='min_max_scaler',
-                                                                      norm_emg=True, norm_torque=True)
-    subject01_20190405_set1_minmax_norm.name = 'subject01_20190405_set1_minmax_norm'
-    my_dm.update_pandas(subject01_20190405_set1_minmax_norm)
-    subject01_20190603_set1_minmax_norm.name = 'subject01_20190603_set1_minmax_norm'
-    my_dm.update_pandas(subject01_20190603_set1_minmax_norm)
+    subject01_20190405_set1_norm = filt.min_max_normalize_data(my_dm.list_of_pandas['subject01_20190405_set1'],
+                                                               normalizer='min_max_scaler', norm_emg=True,
+                                                               norm_torque=True)
+    subject01_20190603_set1_norm = filt.min_max_normalize_data(my_dm.list_of_pandas['subject01_20190603_set1'],
+                                                               normalizer='min_max_scaler', norm_emg=True,
+                                                               norm_torque=True)
+    subject01_20190405_set1_norm.name = 'subject01_20190405_set1_norm'
+    my_dm.update_pandas(subject01_20190405_set1_norm)
 
-    subject01_all_set1_minmax_norm = pd.concat([subject01_20190405_set1_minmax_norm,
-                                                subject01_20190603_set1_minmax_norm], ignore_index=True)
-    subject01_all_set1_minmax_norm.name = 'subject01_all_set1_minmax_norm'
-    my_dm.update_pandas(subject01_all_set1_minmax_norm)
+    subject01_20190603_set1_norm.name = 'subject01_20190603_set1_norm'
+    my_dm.update_pandas(subject01_20190603_set1_norm)
+
+    subject01_all_set1_norm = pd.concat([subject01_20190405_set1_norm, subject01_20190603_set1_norm], ignore_index=True)
+    subject01_all_set1_norm.name = 'subject01_all_set1_norm'
+    my_dm.update_pandas(subject01_all_set1_norm)
 
     # Subject02
-    subject02_20190406_set1_minmax_norm = filt.min_max_normalize_data(my_dm.list_of_pandas['subject02_20190406_set1'],
-                                                                      normalizer='min_max_scaler',
-                                                                      norm_emg=True, norm_torque=True)
-    subject02_20190608_set1_minmax_norm = filt.min_max_normalize_data(my_dm.list_of_pandas['subject02_20190608_set1'],
-                                                                      normalizer='min_max_scaler',
-                                                                      norm_emg=True, norm_torque=True)
-    my_dm.add_pandas(subject02_20190406_set1_minmax_norm, 'subject02_20190406_set1_minmax_norm')
-    my_dm.add_pandas(subject02_20190608_set1_minmax_norm, 'subject02_20190608_set1_minmax_norm')
-    subject02_all_set1_minmax_norm = pd.concat([subject02_20190406_set1_minmax_norm,
-                                                subject02_20190608_set1_minmax_norm], ignore_index=True)
-    my_dm.add_pandas(subject02_all_set1_minmax_norm, 'subject02_all_set1_minmax_norm')
+    subject02_20190406_set1_norm = filt.min_max_normalize_data(my_dm.list_of_pandas['subject02_20190406_set1'],
+                                                               normalizer='min_max_scaler', norm_emg=True,
+                                                               norm_torque=True)
+    subject02_20190608_set1_norm = filt.min_max_normalize_data(my_dm.list_of_pandas['subject02_20190608_set1'],
+                                                               normalizer='min_max_scaler', norm_emg=True,
+                                                               norm_torque=True)
+    subject02_20190406_set1_norm.name = 'subject02_20190406_set1_norm'
+    my_dm.update_pandas(subject02_20190406_set1_norm)
+
+    subject02_20190608_set1_norm.name = 'subject02_20190608_set1_norm'
+    my_dm.update_pandas(subject02_20190608_set1_norm)
+
+    subject02_all_set1_norm = pd.concat([subject02_20190406_set1_norm, subject02_20190608_set1_norm], ignore_index=True)
+    subject02_all_set1_norm.name = 'subject02_all_set1_norm'
+    my_dm.update_pandas(subject02_all_set1_norm)
 
     # Subject03
-    subject03_all_set1_minmax_norm = filt.min_max_normalize_data(my_dm.list_of_pandas['subject03_all_set1'],
-                                                                 normalizer='min_max_scaler',
-                                                                 norm_emg=True, norm_torque=True)
-    my_dm.add_pandas(subject03_all_set1_minmax_norm, 'subject03_all_set1_minmax_norm')
+    subject03_all_set1_norm = filt.min_max_normalize_data(my_dm.list_of_pandas['subject03_all_set1'],
+                                                          normalizer='min_max_scaler', norm_emg=True,
+                                                          norm_torque=True)
+    subject03_all_set1_norm.name = 'subject03_all_set1_norm'
+    my_dm.update_pandas(subject03_all_set1_norm)
 
     # Subject05
-    subject05_all_set1_minmax_norm = filt.min_max_normalize_data(my_dm.list_of_pandas['subject05_all_set1'],
-                                                                 normalizer='min_max_scaler',
-                                                                 norm_emg=True, norm_torque=True)
-    my_dm.add_pandas(subject05_all_set1_minmax_norm, 'subject05_all_set1_minmax_norm')
+    subject05_all_set1_norm = filt.min_max_normalize_data(my_dm.list_of_pandas['subject05_all_set1'],
+                                                          normalizer='min_max_scaler', norm_emg=True,
+                                                          norm_torque=True)
+    subject05_all_set1_norm.name = 'subject05_all_set1_norm'
+    my_dm.update_pandas(subject05_all_set1_norm)
 
     # Subject06
-    subject06_20190429_set1_minmax_norm = filt.min_max_normalize_data(my_dm.list_of_pandas['subject06_20190429_set1'],
-                                                                      normalizer='min_max_scaler',
-                                                                      norm_emg=True, norm_torque=True)
-    subject06_20190509_set1_minmax_norm = filt.min_max_normalize_data(my_dm.list_of_pandas['subject06_20190509_set1'],
-                                                                      normalizer='min_max_scaler',
-                                                                      norm_emg=True, norm_torque=True)
-    my_dm.add_pandas(subject06_20190429_set1_minmax_norm, 'subject06_20190429_set1_minmax_norm')
-    my_dm.add_pandas(subject06_20190509_set1_minmax_norm, 'subject06_20190509_set1_minmax_norm')
-    subject06_all_set1_minmax_norm = pd.concat([subject06_20190429_set1_minmax_norm,
-                                                subject06_20190509_set1_minmax_norm], ignore_index=True)
-    my_dm.add_pandas(subject06_all_set1_minmax_norm, 'subject06_all_set1_minmax_norm')
+    subject06_20190429_set1_norm = filt.min_max_normalize_data(my_dm.list_of_pandas['subject06_20190429_set1'],
+                                                               normalizer='min_max_scaler', norm_emg=True,
+                                                               norm_torque=True)
+    subject06_20190509_set1_norm = filt.min_max_normalize_data(my_dm.list_of_pandas['subject06_20190509_set1'],
+                                                               normalizer='min_max_scaler', norm_emg=True,
+                                                               norm_torque=True)
+    subject06_20190429_set1_norm.name = 'subject06_20190429_set1_norm'
+    my_dm.update_pandas(subject06_20190429_set1_norm)
+
+    subject06_20190509_set1_norm.name = 'subject06_20190509_set1_norm'
+    my_dm.update_pandas(subject06_20190509_set1_norm)
+
+    subject06_all_set1_norm = pd.concat([subject06_20190429_set1_norm, subject06_20190509_set1_norm], ignore_index=True)
+    subject06_all_set1_norm.name = 'subject06_all_set1_norm'
+    my_dm.update_pandas(subject06_all_set1_norm)
 else:
     print('Did not do normalization! If this data is not already cached then there might be trouble!')
 
 # ----------------------------- Create or load ANN instance -------------------------- #
 load_or_create = input('Load or create ann instances? [L / c]: ')
 if not load_or_create or 'l' == load_or_create.lower() or 'load' == load_or_create.lower():
-    subject01_all_set1_ann = ann.ANN(load_from_cache='201907262303_subject01_all_set1')
-    subject02_all_set1_ann = ann.ANN(load_from_cache='201907262303_subject02_all_set1')
-    subject06_all_set0_ann = ann.ANN(load_from_cache='201907262303_subject06_all_set0')
-    subject06_all_set1_ann = ann.ANN(load_from_cache='201907262303_subject06_all_set1')
 
-    subject01_all_set2_ann = ann.ANN(load_from_cache='201907262303_subject01_all_set2')
-    subject02_all_set2_ann = ann.ANN(load_from_cache='201907262303_subject02_all_set2')
-    subject06_all_set2_ann = ann.ANN(load_from_cache='201907262303_subject06_all_set2')
+    # CASE 1: Training on one session and testing on the other (Subject06)
+    subject06_allsplit_set1_ann = ann.ANN(load_from_cache='201907292137_subject06_allsplit_set1')
 
-    subject01_all_set3_ann = ann.ANN(load_from_cache='201907262303_subject01_all_set3')
-    subject02_all_set3_ann = ann.ANN(load_from_cache='201907262303_subject02_all_set3')
-    subject06_all_set3_ann = ann.ANN(load_from_cache='201907262303_subject06_all_set3')
+    # CASE 2: Include Subject01 and Subject02 to the training while still testing on unseen session of Subject06
+    subject126partial_all_set1_ann = ann.ANN(load_from_cache='201907292137_subject126partial_all_set1')
 
-    subject126_all_set1_ann = ann.ANN(load_from_cache='201907262303_subject126_all_set1')
-    subject126train_subject35test_all_set1_ann = ann.ANN(
-        load_from_cache='201907262303_subject126train_subject35test_all_set1')
+    # CASE 3: Train on Subject06 and Subject01 and test on Subject02
+    train16_test2_all_set1_ann = ann.ANN(load_from_cache='201907292137_train16_test2_all_set1')
 
-    subject06_allsplit_set1_ann = ann.ANN(load_from_cache='201907262303_subject06_allsplit_set1')
-    subject126partial_all_set1_ann = ann.ANN(load_from_cache='201907262303_subject126partial_all_set1')
+    # CASE 4: Train on Subject06 and Subject02 and test on Subject01
+    train26_test1_all_set1_ann = ann.ANN(load_from_cache='201907292137_train26_test1_all_set1')
 
-    # Train on Subject06 and Subject01 and test on Subject02
-    train16_test2_all_set1_ann = ann.ANN(load_from_cache='201907262303_train16_test2_all_set1')
-
-    # Train on Subject06 and Subject02 and test on Subject01
-    train26_test1_all_set1_ann = ann.ANN(load_from_cache='201907262303_train26_test1_all_set1')
+    # CASE 5: Train and test on all subjects
+    subject12356_all_set1_ann =  ann.ANN(load_from_cache='201907292139_subject12356_all_set1')
 elif 'c' == load_or_create.lower() or 'create' == load_or_create.lower():
-    # subject01_all_set1_ann = ann.ANN(dataset=my_dm.list_of_pandas['subject01_all_set1'],
-    #                                  spec_cache_code='subject01_all_set1')
-    # subject01_all_set2_ann = ann.ANN(dataset=my_dm.list_of_pandas['subject01_all_set2'],
-    #                                  spec_cache_code='subject01_all_set2')
-    # subject01_all_set3_ann = ann.ANN(dataset=my_dm.list_of_pandas['subject01_all_set3'],
-    #                                  spec_cache_code='subject01_all_set3')
-    #
-    # subject02_all_set1_ann = ann.ANN(dataset=my_dm.list_of_pandas['subject02_all_set1'],
-    #                                  spec_cache_code='subject02_all_set1')
-    # subject02_all_set2_ann = ann.ANN(dataset=my_dm.list_of_pandas['subject02_all_set2'],
-    #                                  spec_cache_code='subject02_all_set2')
-    # subject02_all_set3_ann = ann.ANN(dataset=my_dm.list_of_pandas['subject02_all_set3'],
-    #                                  spec_cache_code='subject02_all_set3')
-    #
-    # subject06_all_set0_ann = ann.ANN(dataset=my_dm.list_of_pandas['subject06_all_set0'],
-    #                                  spec_cache_code='subject06_all_set0')
-    # subject06_all_set1_ann = ann.ANN(dataset=my_dm.list_of_pandas['subject06_all_set1'],
-    #                                  spec_cache_code='subject06_all_set1')
-    # subject06_all_set2_ann = ann.ANN(dataset=my_dm.list_of_pandas['subject06_all_set2'],
-    #                                  spec_cache_code='subject06_all_set2')
-    # subject06_all_set3_ann = ann.ANN(dataset=my_dm.list_of_pandas['subject06_all_set3'],
-    #                                  spec_cache_code='subject06_all_set3')
-    #
-    # # Pre-normalization of datasets for training on subjects 1, 2, and 6, and testing on subjects 3 and 5
-    # subject01_all_set1_norm = filt.min_max_normalize_data(my_dm.list_of_pandas['subject01_all_set1'], norm_emg=True,
-    #                                                       norm_torque=True)
-    # subject01_all_set1_norm_minmax = filt.min_max_normalize_data(my_dm.list_of_pandas['subject01_all_set1'],
-    #                                                              normalizer='min_max_scaler',
-    #                                                              norm_emg=True, norm_torque=True)
-    # subject02_all_set1_norm = filt.min_max_normalize_data(my_dm.list_of_pandas['subject02_all_set1'], norm_emg=True,
-    #                                                       norm_torque=True)
-    # subject02_all_set1_norm_minmax = filt.min_max_normalize_data(my_dm.list_of_pandas['subject02_all_set1'],
-    #                                                              normalizer='min_max_scaler',
-    #                                                              norm_emg=True, norm_torque=True)
-    # subject06_all_set1_norm = filt.min_max_normalize_data(my_dm.list_of_pandas['subject06_all_set1'], norm_emg=True,
-    #                                                       norm_torque=True)
-    # subject126_all_set1_norm = pd.concat([subject01_all_set1_norm, subject02_all_set1_norm, subject06_all_set1_norm],
-    #                                      ignore_index=True)
-    # subject126_all_set1_ann = ann.ANN(dataset=subject126_all_set1_norm, spec_cache_code='subject126_all_set1',
-    #                                   normalize_data=False)
-    #
-    # subject03_test_dataset_norm = filt.min_max_normalize_data(my_dm.list_of_pandas['subject03_all_set1'], norm_emg=True,
-    #                                                           norm_torque=True)
-    # subject05_test_dataset_norm = filt.min_max_normalize_data(my_dm.list_of_pandas['subject05_all_set1'], norm_emg=True,
-    #                                                           norm_torque=True)
-    # subject35_test_dataset_norm = pd.concat([subject03_test_dataset_norm, subject05_test_dataset_norm],
-    #                                         ignore_index=True)
-    #
-    # subject12356_all_set1_norm = pd.concat([subject126_all_set1_norm, subject35_test_dataset_norm], ignore_index=True)
-    # subject12356_all_set1_ann = ann.ANN(dataset=subject12356_all_set1_norm, spec_cache_code='subject12356_all_set1',
-    #                                     normalize_data=False)
-    #
-    # subject06_20190429_set1_norm = filt.min_max_normalize_data(my_dm.list_of_pandas['subject06_20190429_set1'],
-    #                                                            norm_torque=True)
-    # subject06_20190509_set1_norm = filt.min_max_normalize_data(my_dm.list_of_pandas['subject06_20190509_set1'],
-    #                                                            secondary_df=
-    #                                                            my_dm.list_of_pandas['subject06_20190429_set1'],
-    #                                                            norm_torque=True)
-    # subject06_allsplit_set1_ann = ann.ANN(train_dataset=subject06_20190429_set1_norm,
-    #                                       test_dataset=subject06_20190509_set1_norm,
-    #                                       spec_cache_code='subject06_allsplit_set1')
-    #
-    # subject126partial_all_set1_norm = pd.concat([subject01_all_set1_norm, subject02_all_set1_norm,
-    #                                              subject06_20190429_set1_norm], ignore_index=True)
-    # subject126partial_all_set1_ann = ann.ANN(train_dataset=subject126partial_all_set1_norm,
-    #                                          test_dataset=subject06_20190509_set1_norm,
-    #                                          spec_cache_code='subject126partial_all_set1')
-    #
-    # # Create the ANN instance with specific train and test datasets
-    # subject126train_subject35test_all_set1_ann = ann.ANN(train_dataset=subject126_all_set1_norm,
-    #                                                      test_dataset=subject35_test_dataset_norm,
-    #                                                      spec_cache_code='subject126train_subject35test_all_set1')
 
-    # ANN instance for training on one session and testing on the other (Subject06)
-    subject06_allsplit_set1_minmax_norm_ann = ann.ANN(
-        train_dataset=my_dm.list_of_pandas['subject06_20190429_set1_minmax_norm'],
-        test_dataset=my_dm.list_of_pandas['subject06_20190509_set1_minmax_norm'],
-        spec_cache_code='subject06_allsplit_set1_minmax_norm')
+    # CASE 1: Training on one session and testing on the other (Subject06)
+    subject06_allsplit_set1_ann = ann.ANN(train_dataset=my_dm.list_of_pandas['subject06_20190429_set1_norm'],
+                                          test_dataset=my_dm.list_of_pandas['subject06_20190509_set1_norm'],
+                                          spec_cache_code='subject06_allsplit_set1')
 
-    # Include Subject01 and Subject02 to the training while still testing on unseen session of Subject06
-    subject126partial_all_set1_norm = pd.concat([my_dm.list_of_pandas['subject01_all_set1_minmax_norm'],
-                                                 my_dm.list_of_pandas['subject02_all_set1_minmax_norm'],
-                                                 my_dm.list_of_pandas['subject06_20190429_set1_minmax_norm']],
+    # CASE 2: Include Subject01 and Subject02 to the training while still testing on unseen session of Subject06
+    subject126partial_all_set1_norm = pd.concat([my_dm.list_of_pandas['subject01_all_set1_norm'],
+                                                 my_dm.list_of_pandas['subject02_all_set1_norm'],
+                                                 my_dm.list_of_pandas['subject06_20190429_set1_norm']],
                                                 ignore_index=True)
-    subject126partial_all_set1_minmax_norm_ann = ann.ANN(train_dataset=subject126partial_all_set1_norm,
-                                                         test_dataset=my_dm.list_of_pandas[
-                                                             'subject06_20190509_set1_minmax_norm'],
-                                                         spec_cache_code='subject126partial_all_set1_minmax_norm')
+    subject126partial_all_set1_ann = ann.ANN(train_dataset=subject126partial_all_set1_norm,
+                                             test_dataset=my_dm.list_of_pandas['subject06_20190509_set1_norm'],
+                                             spec_cache_code='subject126partial_all_set1')
 
-    # Train on Subject06 and Subject01 and test on Subject02
-    subject16_all_set1_minmax_norm = pd.concat([my_dm.list_of_pandas['subject01_all_set1_minmax_norm'],
-                                                my_dm.list_of_pandas['subject06_all_set1_minmax_norm']],
-                                               ignore_index=True)
-    train16_test2_all_set1_minmax_norm_ann = ann.ANN(train_dataset=subject16_all_set1_minmax_norm,
-                                                     test_dataset=my_dm.list_of_pandas['subject02_all_set1_minmax_norm'],
-                                                     spec_cache_code='train16_test2_all_set1_minmax_norm')
+    # CASE 3: Train on Subject06 and Subject01 and test on Subject02
+    subject16_all_set1_norm = pd.concat([my_dm.list_of_pandas['subject01_all_set1_norm'],
+                                         my_dm.list_of_pandas['subject06_all_set1_norm']], ignore_index=True)
+    train16_test2_all_set1_ann = ann.ANN(train_dataset=subject16_all_set1_norm,
+                                         test_dataset=my_dm.list_of_pandas['subject02_all_set1_norm'],
+                                         spec_cache_code='train16_test2_all_set1')
 
-    # Train on Subject06 and Subject02 and test on Subject01
-    subject26_all_set1_minmax_norm = pd.concat([my_dm.list_of_pandas['subject02_all_set1_minmax_norm'],
-                                                my_dm.list_of_pandas['subject06_all_set1_minmax_norm']],
-                                               ignore_index=True)
-    train26_test1_all_set1_minmax_norm_ann = ann.ANN(train_dataset=subject26_all_set1_minmax_norm,
-                                                     test_dataset=my_dm.list_of_pandas['subject01_all_set1_minmax_norm'],
-                                                     spec_cache_code='train26_test1_all_set1_minmax_norm')
+    # CASE 4: Train on Subject06 and Subject02 and test on Subject01
+    subject26_all_set1_norm = pd.concat([my_dm.list_of_pandas['subject02_all_set1_norm'],
+                                         my_dm.list_of_pandas['subject06_all_set1_norm']], ignore_index=True)
+    train26_test1_all_set1_ann = ann.ANN(train_dataset=subject26_all_set1_norm,
+                                         test_dataset=my_dm.list_of_pandas['subject01_all_set1_norm'],
+                                         spec_cache_code='train26_test1_all_set1')
+
+    # CASE 5: Train and test on all subjects
+    subject12356_all_set1_norm = pd.concat([my_dm.list_of_pandas['subject01_all_set1_norm'],
+                                            my_dm.list_of_pandas['subject02_all_set1_norm'],
+                                            my_dm.list_of_pandas['subject03_all_set1_norm'],
+                                            my_dm.list_of_pandas['subject05_all_set1_norm'],
+                                            my_dm.list_of_pandas['subject06_all_set1_norm']], ignore_index=True)
+    subject12356_all_set1_ann = ann.ANN(dataset=subject12356_all_set1_norm, normalize_data=False,
+                                        spec_cache_code='subject12356_all_set1')
+else:
+    print('No ANN instances were created or loaded!')
 
 # ----------------------------- Analyze ANN datasets (e.g. train and test) ----------- #
 plot_pre_analysis = False
@@ -428,30 +359,39 @@ if plot_pre_analysis:
         saf.plot_muscle_correlations(df, include_torque=True, save_fig_as=save_fig_as_spec + '_corr_heatmap')
 
 
-    saf.plot_grid_emg_average([subject01_all_set1_ann.normalized_dataset, subject02_all_set1_ann.normalized_dataset,
-                               subject06_all_set1_ann.normalized_dataset],
+    saf.plot_grid_emg_average([my_dm.list_of_pandas['subject01_all_set1_norm'],
+                               my_dm.list_of_pandas['subject02_all_set1_norm'],
+                               my_dm.list_of_pandas['subject06_all_set1_norm']],
                               ['Knee Ext.', 'Knee Flex.', 'Hip Ext.', 'Ankle Flex.'],
                               ['Subject01', 'Subject02', 'Subject06'], y_axis_range=(0, 0.7), plot_font_size=12,
                               save_fig_as='all_subject_grid_emg_avg')
 
-    subject01_axs = analyzing_plots(subject01_all_set1_ann.normalized_dataset, save_fig_as_spec='subject01_all_set1')
-    subject02_axs = analyzing_plots(subject02_all_set1_ann.normalized_dataset, save_fig_as_spec='subject02_all_set1')
-    subject06_axs = analyzing_plots(subject06_all_set1_ann.normalized_dataset, save_fig_as_spec='subject06_all_set1')
+    saf.plot_grid_emg_average([my_dm.list_of_pandas['subject03_all_set1_norm'],
+                               my_dm.list_of_pandas['subject05_all_set1_norm']],
+                              ['Knee Ext.', 'Knee Flex.', 'Hip Ext.', 'Ankle Flex.'],
+                              ['Subject03', 'Subject05'], y_axis_range=(0, 0.85), plot_font_size=12,
+                              save_fig_as='subjects3and5_grid_emg_avg')
 
+    saf.plot_moment_avg(my_dm.list_of_pandas['subject01_all_set1_norm'], plot_font_size=24,
+                        y_axis_range=(-0.6, 0.9), save_fig_as='subject01_all_set1_moment_avg')
+    saf.plot_moment_avg(my_dm.list_of_pandas['subject02_all_set1_norm'], plot_font_size=24,
+                        y_axis_range=(-0.6, 0.9), save_fig_as='subject02_all_set1_moment_avg')
+    saf.plot_moment_avg(my_dm.list_of_pandas['subject06_all_set1_norm'], plot_font_size=24,
+                        y_axis_range=(-0.6, 0.9), save_fig_as='subject06_all_set1_moment_avg')
 
-    saf.plot_moment_avg(subject01_all_set1_ann.train_dataset, title='Subject01 Knee Joint Moments',
-                        ylabel='normalized moments', y_axis_range=(-0.6, 0.8), save_fig_as='subject01_all_set1_moment_avg')
-    saf.plot_moment_avg(subject02_all_set1_ann.train_dataset, title='Subject02 Knee Joint Moments',
-                        ylabel='normalized moments', y_axis_range=(-0.6, 0.8), save_fig_as='subject02_all_set1_moment_avg')
-    saf.plot_moment_avg(subject06_all_set0_ann.train_dataset, title='Subject06 Knee Joint Moments',
-                        ylabel='normalized moments', y_axis_range=(-0.6, 0.8), save_fig_as='subject06_all_set0_moment_avg')
+    saf.plot_moment_avg(my_dm.list_of_pandas['subject01_all_set1_norm'], plot_min_med_max=True, plot_font_size=24,
+                        y_axis_range=(-0.65, 1), save_fig_as='subject01_all_set1_moment_avg_w_minmax')
+    saf.plot_moment_avg(my_dm.list_of_pandas['subject02_all_set1_norm'], plot_min_med_max=True, plot_font_size=24,
+                        y_axis_range=(-0.65, 1), save_fig_as='subject02_all_set1_moment_avg_w_minmax')
+    saf.plot_moment_avg(my_dm.list_of_pandas['subject06_all_set1_norm'], plot_min_med_max=True, plot_font_size=24,
+                        y_axis_range=(-0.65, 1), save_fig_as='subject06_all_set1_moment_avg_w_minmax')
 
-    saf.plot_cycle_time_quartile(subject01_all_set1_ann.train_dataset, title='Gait cycle duration quartile',
-                                 save_fig_as='subject01_all_set1_cycle_duration_quartile')
-    saf.plot_cycle_time_quartile(subject02_all_set1_ann.train_dataset, title='Gait cycle duration quartile',
-                                 save_fig_as='subject02_all_set1_cycle_duration_quartile')
-    saf.plot_cycle_time_quartile(subject06_all_set0_ann.train_dataset, title='Gait cycle duration quartile',
-                                 save_fig_as='subject06_all_set1_cycle_duration_quartile')
+    # saf.plot_cycle_time_quartile(subject01_all_set1_ann.train_dataset, title='Gait cycle duration quartile',
+    #                              save_fig_as='subject01_all_set1_cycle_duration_quartile')
+    # saf.plot_cycle_time_quartile(subject02_all_set1_ann.train_dataset, title='Gait cycle duration quartile',
+    #                              save_fig_as='subject02_all_set1_cycle_duration_quartile')
+    # saf.plot_cycle_time_quartile(subject06_all_set0_ann.train_dataset, title='Gait cycle duration quartile',
+    #                              save_fig_as='subject06_all_set1_cycle_duration_quartile')
 
     # saf.plot_muscle_average(subject01_20190603_set0_ann.train_dataset, ['RectFem', 'VasMed', 'VasLat'], y_lim=(0, 0.99),
     #                         plot_max_emg=True)
@@ -463,96 +403,53 @@ if plot_pre_analysis:
     # analyzing_plots(subject06_20190429_set0_ann.train_dataset, title_spec='Subject06 20190429')
     # analyzing_plots(subject06_20190509_set0_ann.train_dataset, title_spec='Subject06 20190509')
 
-    # norm_values = my_ann.get_norm_values()
-    # normalized_dataset = filt.real_time_normalize(my_ann.dataset, norm_values)
-    # saf.plot_muscle_correlations(normalized_dataset)
-
 # ----------------------------- Train ANNs on datasets ------------------------------- #
 train_models = True
 if train_models:
-    # Look at generalizability between sessions by training on 1 session and testing on the other (Subject06)
-    subject06_allsplit_set1_ann.train_lstm(model_name='LSTM_adam_64_02_05_00_00_20_relu_bc1', optimizer='adam',
-                                           num_nodes=64, epochs=0, val_split=0.0, dropout_rate=0.2,
-                                           recurrent_dropout_rate=0.5, l1_reg=0.0, l2_reg=0.0, look_back=20,
-                                           keep_training_model=True, initial_epoch=0, batch_size_case=1,
-                                           use_test_as_val=True)
+    # CASE 1: Training on one session and testing on the other (Subject06)
+    subject06_allsplit_set1_ann.train_lstm(model_name='LSTM_adam_64_04_05_00_00_20_relu_sigmoid_bc1', optimizer='adam',
+                                           num_nodes=64, epochs=250, val_split=0.1, early_stop_patience=30,
+                                           dropout_rate=0.4, recurrent_dropout_rate=0.5, l1_reg=0.0, l2_reg=0.0,
+                                           look_back=20, keep_training_model=True, initial_epoch=0, batch_size_case=1,
+                                           use_test_as_val=True, activation_func='relu',
+                                           recurrent_activation_func='hard_sigmoid')
 
-    # Look at if including the rest of the subjects improves the testing of the unseen session
-    subject126partial_all_set1_ann.train_lstm(model_name='LSTM_adam_64_02_05_10_relu_bc1', optimizer='adam',
-                                              num_nodes=64, epochs=150, val_split=0.0, dropout_rate=0.2,
-                                              recurrent_dropout_rate=0.5, look_back=10, keep_training_model=True,
-                                              initial_epoch=0, batch_size_case=1, use_test_as_val=True)
+    # CASE 2: Include Subject01 and Subject02 to the training while still testing on unseen session of Subject06
+    subject126partial_all_set1_ann.train_lstm(model_name='LSTM_adam_64_04_05_00_00_20_relu_sigmoid_bc1',
+                                              optimizer='adam', num_nodes=64, epochs=250, val_split=0.1,
+                                              early_stop_patience=30, dropout_rate=0.4, recurrent_dropout_rate=0.5,
+                                              l1_reg=0.0, l2_reg=0.0, look_back=20, keep_training_model=True,
+                                              initial_epoch=0, batch_size_case=1, use_test_as_val=True,
+                                              activation_func='relu', recurrent_activation_func='hard_sigmoid')
 
-    # Train on Subject06 and Subject02 and test on Subject01
-    train26_test1_all_set1_ann.train_lstm(model_name='LSTM_adam_64_02_05_10_relu_bc1', optimizer='adam',
-                                          num_nodes=64, epochs=150, val_split=0.0, dropout_rate=0.2,
-                                          recurrent_dropout_rate=0.5, look_back=10, keep_training_model=True,
-                                          initial_epoch=0, batch_size_case=1, use_test_as_val=True)
-    train26_test1_all_set1_minmax_norm_ann.train_lstm(model_name='LSTM_adam_64_02_05_00_00_20_hard_sigmoid_bc1',
-                                                      optimizer='adam', num_nodes=64, epochs=200, val_split=0.0,
-                                                      dropout_rate=0.2, recurrent_dropout_rate=0.5, l1_reg=0.0,
-                                                      l2_reg=0.0, look_back=20, keep_training_model=True,
-                                                      initial_epoch=0, batch_size_case=1, use_test_as_val=True)
+    # CASE 3: Train on Subject06 and Subject01 and test on Subject02
+    train16_test2_all_set1_ann.train_lstm(model_name='LSTM_adam_64_04_05_00_00_20_relu_sigmoid_bc1', optimizer='adam',
+                                          num_nodes=64, epochs=250, val_split=0.1, early_stop_patience=30,
+                                          dropout_rate=0.4, recurrent_dropout_rate=0.5, l1_reg=0.0, l2_reg=0.0,
+                                          look_back=20, keep_training_model=True, initial_epoch=0, batch_size_case=1,
+                                          use_test_as_val=True, activation_func='relu',
+                                          recurrent_activation_func='hard_sigmoid')
 
-    # Train on Subject06 and Subject01 and test on Subject02
-    train16_test2_all_set1_ann.train_lstm(model_name='LSTM_adam_64_02_05_10_relu_bc1', optimizer='adam',
-                                          num_nodes=64, epochs=150, val_split=0.0, dropout_rate=0.2,
-                                          recurrent_dropout_rate=0.5, look_back=10, keep_training_model=True,
-                                          initial_epoch=0, batch_size_case=1, use_test_as_val=True)
+    # CASE 4: Train on Subject06 and Subject02 and test on Subject01
+    train26_test1_all_set1_ann.train_lstm(model_name='LSTM_adam_64_04_05_00_00_20_relu_sigmoid_bc1', optimizer='adam',
+                                          num_nodes=64, epochs=250, val_split=0.1, early_stop_patience=30,
+                                          dropout_rate=0.4, recurrent_dropout_rate=0.5, l1_reg=0.0, l2_reg=0.0,
+                                          look_back=20, keep_training_model=True, initial_epoch=0, batch_size_case=1,
+                                          use_test_as_val=True, activation_func='relu',
+                                          recurrent_activation_func='hard_sigmoid')
 
+    # CASE 5: Train and test on all subjects
+    subject12356_all_set1_ann.train_lstm(model_name='LSTM_adam_64_04_05_00_00_20_relu_sigmoid_bc1', optimizer='adam',
+                                         num_nodes=64, epochs=250, val_split=0.1, early_stop_patience=30,
+                                         dropout_rate=0.4, recurrent_dropout_rate=0.5, l1_reg=0.0, l2_reg=0.0,
+                                         look_back=20, keep_training_model=True, initial_epoch=0, batch_size_case=1,
+                                         use_test_as_val=True, activation_func='relu',
+                                         recurrent_activation_func='hard_sigmoid')
 
-
-
-
-
-    subject01_all_set1_ann.train_lstm(model_name='new_LSTM_adam_64_02_01_05_4_relu_bc1', optimizer='adam', num_nodes=64,
-                                      epochs=150, early_stop_patience=30, val_split=0.2, dropout_rate=0.1,
-                                      recurrent_dropout_rate=0.5, look_back=4, keep_training_model=True,
-                                      initial_epoch=0, batch_size_case=1)
-    # subject02_all_set1_ann.train_lstm(model_name='LSTM_adam_64_02_01_05_4_relu_bc1', optimizer='adam', num_nodes=64,
-    #                                   epochs=150, early_stop_patience=30, val_split=0.2, dropout_rate=0.1,
-    #                                   recurrent_dropout_rate=0.5, look_back=4, keep_training_model=True,
-    #                                   initial_epoch=0, batch_size_case=1)
-    subject06_all_set1_ann.train_lstm(model_name='new_LSTM_adam_64_02_01_05_4_relu_bc1', optimizer='adam', num_nodes=64,
-                                      epochs=150, early_stop_patience=30, val_split=0.2, dropout_rate=0.1,
-                                      recurrent_dropout_rate=0.5, look_back=4, keep_training_model=True,
-                                      initial_epoch=100, batch_size_case=1)
-    subject126_all_set1_ann.train_lstm(model_name='LSTM_adam_64_02_01_05_4_relu_bc1', optimizer='adam', num_nodes=64,
-                                      epochs=150, early_stop_patience=30, val_split=0.2, dropout_rate=0.1,
-                                      recurrent_dropout_rate=0.5, look_back=4, keep_training_model=True,
-                                      initial_epoch=0, batch_size_case=1)
-    subject126train_subject35test_all_set1_ann.train_lstm(model_name='LSTM_adam_128_02_01_05_4_relu_bc1',
-                                                          optimizer='adam', num_nodes=128, epochs=50,
-                                                          early_stop_patience=30, val_split=0.2, dropout_rate=0.1,
-                                                          recurrent_dropout_rate=0.5, look_back=4,
-                                                          keep_training_model=True, initial_epoch=0, batch_size_case=1,
-                                                          use_test_as_val=True)
-    subject06_allsplit_set1_ann.train_lstm(model_name='LSTM_adam_128_02_02_04_10_relu_bc1', optimizer='adam',
-                                           num_nodes=128, epochs=150, early_stop_patience=30, val_split=0.2,
-                                           dropout_rate=0.3, recurrent_dropout_rate=0.5, look_back=10,
-                                           keep_training_model=True, initial_epoch=100, batch_size_case=1,
-                                           use_test_as_val=True)
-    subject126partial_all_set1_ann.train_lstm(model_name='LSTM_adam_128_02_01_05_10_relu_bc1', optimizer='adam',
-                                              num_nodes=128, epochs=150, early_stop_patience=30, val_split=0.2,
-                                              dropout_rate=0.1, recurrent_dropout_rate=0.5, look_back=10,
-                                              keep_training_model=True, initial_epoch=0, batch_size_case=1,
-                                              use_test_as_val=True)
 
 # ----------------------------- Evaluate trained models ------------------------------ #
 # subject06_LSTM_adam0001_64_02_00_4_relu_prediction = subject06_all_set1_ann.get_test_prediction(
 #     'LSTM_adam0001_64_02_00_4_relu', lstm=True, lstm_look_back=4)
-subject01_all_set1_LSTM_adam_64_02_01_05_4_relu_bc1 = subject01_all_set1_ann.get_test_prediction(
-    model_name='LSTM_adam_64_02_01_05_4_relu_bc1_best', lstm=True, lstm_look_back=4)
 subject06_allsplit_set1_ann_LSTM_adam_64_02_05_10_relu_bc1 = subject06_allsplit_set1_ann.get_test_prediction(
     model_name='LSTM_adam_64_02_05_10_relu_bc1', lstm=True, lstm_look_back=10)
 
-# subject01_all_set1_ann.plot_test('LSTM_adam_64_02_03_3_relu_best', lstm=True, lstm_look_back=3, cycle_to_plot='worst')
-# subject01_all_set1_ann.plot_test('LSTM_adam_64_02_03_4_relu_best', lstm=True, lstm_look_back=4, cycle_to_plot='worst')
-# subject01_all_set1_ann.plot_test('LSTM_adam_64_01_03_4_relu_best', lstm=True, lstm_look_back=4, cycle_to_plot='worst')
-# subject01_all_set2_ann.plot_test('LSTM_adam_32_02_03_4_relu_best', lstm=True, lstm_look_back=4, cycle_to_plot='worst')
-
-# subject01_all_set1_ann.evaluate_model('LSTM_adam_32_02_03_3_relu_best', lstm=True, lstm_look_back=3)
-# subject01_all_set1_ann.evaluate_model('LSTM_adam_64_02_03_3_relu_best', lstm=True, lstm_look_back=3)
-# subject01_all_set1_ann.evaluate_model('LSTM_adam_64_02_03_4_relu_best', lstm=True, lstm_look_back=4)
-# subject01_all_set1_ann.evaluate_model('LSTM_adam_32_02_03_4_relu_best', lstm=True, lstm_look_back=4)
-# subject01_all_set2_ann.evaluate_model('LSTM_adam_32_02_03_4_relu_best', lstm=True, lstm_look_back=4)
