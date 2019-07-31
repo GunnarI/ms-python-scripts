@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
 import matplotlib.gridspec as gridspec
 import numpy as np
+import pandas as pd
 import seaborn as sns
 from scipy import signal as scisig
 
@@ -50,6 +51,47 @@ def plot_muscle_correlations(df, method='pearson', include_torque=False, title=N
         muscle_df.drop(columns=['Time', 'Torque', 'Trial'], errors='ignore', inplace=True)
 
     correlation_matrix = muscle_df.corr(method=method)
+    plt.figure()
+    if title is not None:
+        plt.title(title)
+    sns_plot = sns.heatmap(correlation_matrix, annot=True, fmt=".2f", vmin=-1, vmax=1)
+
+    fig = sns_plot.get_figure()
+
+    if not save_fig_as:
+        fig.show()
+    else:
+        save_image_as(fig, './figures/correlations/', save_fig_as)
+
+    return fig
+
+
+def plot_mean_col_correlations(dfs, df_names, col_name, method='pearson', title=None, save_fig_as=None):
+
+    joint_df = pd.DataFrame(columns=df_names)
+
+    for df, df_name in zip(dfs, df_names):
+        df_copy = df.copy()
+        df_copy = df_copy[df_copy.Time >= 0]
+        df_copy.reset_index(drop=True, inplace=True)
+
+        muscle_list = list(df_copy)
+        muscle_list.remove('Time')
+        muscle_list.remove('Torque')
+        muscle_list.remove('Trial')
+
+        trial_groups = [trial for _, trial in df_copy.groupby('Trial')]
+        xvec = np.arange(0, 101)
+        num_steps = len(xvec)
+        col_vec = np.zeros((len(trial_groups), num_steps))
+
+        for i, df in enumerate(trial_groups):
+            col_vec[i, :] = resample_signal(df[col_name], num_steps)
+
+        joint_df[df_name] = np.mean(col_vec, axis=0)
+
+    correlation_matrix = joint_df.corr(method=method)
+
     plt.figure()
     if title is not None:
         plt.title(title)
@@ -139,9 +181,9 @@ def plot_moment_avg(df, plot_min_med_max=False, plot_worst=False, title=None, xl
         print('The fastest cycle was: ' + min_cycle[0] + '\n\tTime steps: ' + str(min_cycle[1]))
         print('The slowest cycle was: ' + max_cycle[0] + '\n\tTime steps: ' + str(max_cycle[1]))
         ax1.plot(min_cycle_xvec, min_cycle_moments, label='Fastest cycle')
-        ax1.plot(med_cycle_xvec, med_cycle_moments, label='Median cycle')
+        # ax1.plot(med_cycle_xvec, med_cycle_moments, label='Median cycle')
         ax1.plot(max_cycle_xvec, max_cycle_moments, label='Slowest cycle')
-        ax1.legend()
+        ax1.legend(prop={'size': plot_font_size})
 
     fig.add_subplot(ax1)
     if not save_fig_as:
@@ -170,10 +212,10 @@ def plot_muscle_average(df, muscle_list=None, ylabel=None, y_axis_range=None, pl
         colors = ['red', 'green', 'cyan', 'yellow']
         if ylabel is not None:
             ax1.set_ylabel(ylabel)
+        trial_groups = [trial for _, trial in df_copy.groupby('Trial')]
+        xvec = np.arange(0, 101)
+        num_steps = len(xvec)
         for i, muscle in enumerate(muscle_list):
-            trial_groups = [trial for _, trial in df_copy.groupby('Trial')]
-            xvec = np.arange(0, 101)
-            num_steps = len(xvec)
             emg_vec = np.zeros((len(trial_groups), num_steps))
             for j, df in enumerate(trial_groups):
                 emg_vec[j, :] = resample_signal(df[muscle], num_steps)
@@ -393,6 +435,7 @@ def plot_grid_emg_average(dfs_list, row_names, col_names, muscle_lists=None, yla
                     num_steps = len(xvec)
                     emg_vec = np.zeros((len(trial_groups), num_steps))
                     for j, df in enumerate(trial_groups):
+                        df = df[df.Time >= 0.0]
                         emg_vec[j, :] = resample_signal(df[muscle], num_steps)
                     emg_avg = np.mean(emg_vec, axis=0)
                     emg_std = np.std(emg_vec, axis=0)
