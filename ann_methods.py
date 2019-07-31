@@ -237,7 +237,7 @@ class ANN:
 
     def train_lstm(self, initializer='glorot_uniform', optimizer='rmsprop', learning_rate=None, model_name='lstm',
                    num_nodes=32, epochs=100, val_split=0.2, early_stop_patience=None, dropout_rate=0.1, l1_reg=0.01,
-                   l2_reg=0.01, recurrent_dropout_rate=0.5, look_back=3, activation_func='hard_sigmoid',
+                   l2_reg=0.01, recurrent_dropout_rate=0.5, look_back=3, activation_func='relu',
                    recurrent_activation_func='hard_sigmoid', tensorboard=True, keep_training_model=False,
                    initial_epoch=0, batch_size_case=1, use_test_as_val=False):
         """
