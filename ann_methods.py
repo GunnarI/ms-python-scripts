@@ -26,7 +26,7 @@ class ANN:
         self.models = {}
         self.model_histories = {}
         self.model_sessions = {}
-        self.model_predictions = {}
+        # self.model_predictions = {}
         if load_from_cache is None and dataset is not None:
             self.cache_path = ''
             self.create_cache_dir(spec_cache_code)
@@ -186,7 +186,7 @@ class ANN:
 
             model.compile(loss='mean_squared_error',
                           optimizer=optimizer,
-                          metrics=['mean_absolute_error', 'mean_squared_error'])
+                          metrics=['mean_absolute_error', 'mean_absolute_percentage_error'])
 
         callbacks = []
         if early_stop_patience is not None:
@@ -213,7 +213,7 @@ class ANN:
             try:
                 model_copy = keras.Model(inputs=[emg_t_past, emg_t_now], outputs=prediction, name=model_name)
                 model_copy.compile(loss='mean_squared_error', optimizer=optimizer,
-                                   metrics=['mean_absolute_error', 'mean_squared_error'])
+                                   metrics=['mean_absolute_error', 'mean_absolute_percentage_error'])
                 self.save_model(model_copy, model_name + '_copy')
             except NameError as error:
                 warnings.warn("Could not save model copy. Return NameError: " + str(error))
@@ -263,6 +263,11 @@ class ANN:
         :param int batch_size_case: either 1 or 2 (default: 1). Case 1 makes all the cycles of equal length by zero padding and uses batch size as the length of these cycles
         :return:
         """
+        if model_name in self.models:
+            if not keep_training_model:
+                warnings.warn("Model name already exists! Either change the name or set keep_training_model=True")
+                return
+
         x_train, y_train, longest_cycle = gen_lstm_dataset(self.train_dataset.copy(), look_back,
                                                            batch_size_case=batch_size_case)
         if use_test_as_val:
@@ -283,16 +288,12 @@ class ANN:
         K.clear_session()
 
         if model_name in self.models:
-            if not keep_training_model:
-                warnings.warn("Model name already exists! Either change the name or set keep_training_model=True")
-                return
-            else:
-                if initial_epoch == 0:
-                    warnings.warn("initial_epoch=0")
+            if initial_epoch == 0:
+                warnings.warn("initial_epoch=0")
 
-                K.set_session(self.model_sessions[model_name])
-                with K.get_session().graph.as_default():
-                    model = self.models[model_name]
+            K.set_session(self.model_sessions[model_name])
+            with K.get_session().graph.as_default():
+                model = self.models[model_name]
         else:
             emg_input = keras.Input(shape=(look_back, num_features), name='emg_input')
             x = layers.LSTM(num_nodes, activation=activation_func, recurrent_activation=recurrent_activation_func,
@@ -315,7 +316,7 @@ class ANN:
 
             model.compile(loss='mean_squared_error',
                           optimizer=optimizer,
-                          metrics=['mean_absolute_error', 'mean_squared_error'])
+                          metrics=['mean_absolute_error', 'mean_absolute_percentage_error'])
 
         callbacks = []
         if early_stop_patience is not None:
@@ -325,7 +326,7 @@ class ANN:
                 callbacks.append(keras.callbacks.EarlyStopping(monitor='val_loss', patience=early_stop_patience))
 
         callbacks.append(keras.callbacks.CSVLogger(self.cache_path + 'history/' + model_name + '.log',
-                                                   separator=',', append=False))
+                                                   separator=',', append=keep_training_model))
         if tensorboard:
             callbacks.append(keras.callbacks.TensorBoard(log_dir=self.cache_path + 'tensorboard/' + model_name,
                                                          histogram_freq=5, write_grads=True))
@@ -343,7 +344,7 @@ class ANN:
             try:
                 model_copy = keras.Model(inputs=emg_input, outputs=prediction, name=model_name)
                 model_copy.compile(loss='mean_squared_error', optimizer=optimizer,
-                                   metrics=['mean_absolute_error', 'mean_squared_error'])
+                                   metrics=['mean_absolute_error', 'mean_absolute_percentage_error'])
                 self.save_model(model_copy, model_name + '_copy')
             except NameError as error:
                 warnings.warn("Could not save model copy. Return NameError: " + str(error))
@@ -402,7 +403,7 @@ class ANN:
 
         model.compile(loss='mean_squared_error',
                       optimizer=optimizer,
-                      metrics=['mean_absolute_error', 'mean_squared_error'])
+                      metrics=['mean_absolute_error', 'mean_absolute_percentage_error'])
 
         callbacks = []
         if early_stop_patience is not None:
@@ -432,7 +433,8 @@ class ANN:
             print(self.models[model_name].summary())
             keras.utils.plot_model(self.models[model_name], to_file=self.cache_path + 'diagrams/' + model_name + '.png')
 
-    def evaluate_model(self, model_name, lstm=False, lstm_look_back=3, lstm_w_mlp=False):
+    def evaluate_model(self, model_name, lstm=False, lstm_look_back=3, lstm_w_mlp=False, plot_train_history=False,
+                       save_history_fig_as=None):
         test_dataset = self.test_dataset.copy()
         moment_avg = test_dataset.groupby('Time')['Torque'].mean()
 
@@ -445,20 +447,21 @@ class ANN:
             test_dataset.drop(columns=['Time', 'Trial'], errors='ignore', inplace=True)
             test_labels = test_dataset.pop('Torque')
 
-        if model_name in self.model_histories.keys():
-            plot_history(self.model_histories[model_name])
+        if plot_train_history and model_name in self.model_histories.keys():
+            plot_history([self.model_histories[model_name]], save_history_fig_as)
 
         K.set_session(self.model_sessions[model_name])
         with K.get_session().graph.as_default():
-            loss, mae, mse = self.models[model_name].evaluate(x=test_dataset, y=test_labels, verbose=0)
-            if model_name in self.model_predictions:
-                t = np.linspace(0.0, len(moment_avg)/100, len(moment_avg))
-                moment_avg_figure = saf.plot_moment_avg(self.model_predictions[model_name])
-                ax1 = moment_avg_figure.get_axes()[0]
-                ax1.plot(t, moment_avg)
+            loss, mae, mape = self.models[model_name].evaluate(x=test_dataset, y=test_labels, verbose=0)
+        print("Evaluation for model " + model_name + ":")
         print("Testing set knee torque Loss: {:5.4f}\n"
               "\t\t\t\t\t\tMean Abs Error: {:5.4f}\n"
-              "\t\t\t\t\t\tMean Square Error: {:5.4f}".format(loss, mae, mse))
+              "\t\t\t\t\t\tMean Abs Percentage Error: {:5.4f}\n".format(loss, mae, mape))
+
+    def compare_model_training(self, model_names, labels, plot_font_size=12, save_history_fig_as=None):
+        list_of_hist_dfs = [self.model_histories[model_name] for model_name in model_names]
+        plot_history(list_of_hist_dfs, labels=labels, plot_font_size=plot_font_size, save_fig_as=save_history_fig_as)
+
 
     def create_cache_dir(self, spec_cache_code=None):
         if spec_cache_code is None:
@@ -486,26 +489,6 @@ class ANN:
         self.train_dataset = pd.read_pickle(self.cache_path + 'dataframes/train_dataset.pkl')
         self.test_dataset = pd.read_pickle(self.cache_path + 'dataframes/test_dataset.pkl')
         self.normalized_dataset = pd.read_pickle(self.cache_path + 'dataframes/normalized_dataset.pkl')
-
-    def add_model_prediction(self, model_name):
-        if model_name in self.model_sessions and model_name in self.models:
-            test_set = self.test_dataset.copy()
-            prediction_set = self.test_dataset.copy()
-            cycles = list(test_set.groupby('Trial').apply(np.unique).index)
-
-            trials = test_set.pop('Trial')
-            test_set.drop(columns=['Time', 'Torque'], errors='ignore', inplace=True)
-
-            K.set_session(self.model_sessions[model_name])
-            with K.get_session().graph.as_default():
-                for cycle in cycles:
-                    prediction_set.loc[prediction_set.Trial == cycle, 'Torque'] = self.models[model_name].predict(
-                        test_set[trials == cycle])[:, 0]
-            self.model_predictions[model_name] = prediction_set
-
-            K.clear_session()
-        else:
-            warnings.warn('Model name ' + model_name + ' not found in existing models or model sessions')
 
     def save_model(self, model, model_name):
         self.model_sessions[model_name] = K.get_session()
@@ -653,13 +636,14 @@ class ANN:
                 cycle_to_predict = [cycle for cycle, _ in dataset.groupby('Trial')]
             elif not isinstance(cycle_to_predict, list):
                 cycle_to_predict = [cycle_to_predict]
-
-            test_cycle = dataset[dataset.Trial == cycle_to_predict]
+            cycle_to_predict = cycle_to_predict[0]
+            test_cycle = dataset.loc[dataset.Trial == cycle_to_predict]
         else:
             test_cycle = dataset.copy()
 
         if lstm:
-            test_cycle, test_labels, _ = gen_lstm_dataset(test_cycle, lstm_look_back, batch_size_case=0)
+            test_cycle, test_labels, _, cycle_order = gen_lstm_dataset(test_cycle, lstm_look_back, batch_size_case=0,
+                                                                       get_cycle_list=True)
         else:
             test_cycle.drop(columns=['Time', 'Trial'], inplace=True, errors='ignore')
             test_labels = test_cycle.pop('Torque')
@@ -672,21 +656,22 @@ class ANN:
             test_prediction = test_prediction[:, 0]
 
         if cycle_to_predict == 'all':
-            # dataset['Torque'] = test_prediction
             df_to_return = []
-            for _, df in dataset.groupby('Trial'):
+            for df in cycle_order:
                 df_to_return.append(df[lstm_look_back-1:])
-            df_to_return = pd.concat(df_to_return)
+            df_to_return = pd.concat(df_to_return, ignore_index=True)
             df_to_return['Torque'] = test_prediction
-            # df_to_return = dataset
         else:
             df_to_return = dataset[dataset.Trial == cycle_to_predict]
+            df_to_return = df_to_return[lstm_look_back-1:]
             df_to_return['Torque'] = test_prediction
+            df_to_return = df_to_return[df_to_return.Time >= 0]
+            df_to_return.reset_index(inplace=True)
 
         return df_to_return
 
 
-def gen_lstm_dataset(df, look_back, batch_size_case=1):
+def gen_lstm_dataset(df, look_back, batch_size_case=1, get_cycle_list=False):
     """
     Prepares the dataset for training the LSTM depending on how many past timesteps should be used (i.e. look_back)
     :param pandas.DataFrame df: A DataFrame dataset with all the emg data, with dimensions (num_timesteps, num_features)
@@ -701,7 +686,10 @@ def gen_lstm_dataset(df, look_back, batch_size_case=1):
 
     longest_cycle = df_copy.groupby('Trial')['Torque'].count().max(level=0).max()
 
+    trial_groups = [df for _, df in df_copy.groupby('Trial', sort=False)]
+
     for _, trial_group in df_copy.groupby('Trial', sort=False):
+    # for _, trial_group in df_copy.groupby('Trial'):
         trial_group.drop(columns=['Time', 'Trial'], errors='ignore', inplace=True)
         if batch_size_case == 1:
             trial_group = zero_pad_dataset(trial_group, longest_cycle)
@@ -718,7 +706,10 @@ def gen_lstm_dataset(df, look_back, batch_size_case=1):
             inputs.append(group_inputs[i:window_end, :])
             labels.append(group_labels[window_end-1])
 
-    return np.array(inputs), np.array(labels), longest_cycle
+    if get_cycle_list:
+        return np.array(inputs), np.array(labels), longest_cycle, trial_groups
+    else:
+        return np.array(inputs), np.array(labels), longest_cycle
 
 
 def zero_pad_dataset(df, target_len, smooth_transition=True):
@@ -822,22 +813,39 @@ def update_combined_bat(model_name, base_path):
             f.write(string_to_add)
 
 
-def plot_history(hist):
-    plt.figure()
-    plt.xlabel('Epoch')
-    plt.ylabel('Mean Abs Error [MPG]')
-    plt.plot(hist['epoch'], hist['mean_absolute_error'],
-             label='Train Error')
-    plt.plot(hist['epoch'], hist['val_mean_absolute_error'],
-             label='Val Error')
-    plt.legend()
+def plot_history(histories, labels=None, plot_font_size=12, save_fig_as=None):
+    """
 
-    plt.figure()
-    plt.xlabel('Epoch')
-    plt.ylabel('Mean Square Error [$MPG^2$]')
-    plt.plot(hist['epoch'], hist['mean_squared_error'],
-             label='Train Error')
-    plt.plot(hist['epoch'], hist['val_mean_squared_error'],
-             label='Val Error')
-    plt.legend()
-    plt.show()
+    :param histories: a list of training history dataframes generated from the history logs in the save_model function
+    :param plot_font_size: the letter size of both axis numbers and legends
+    :param save_fig_as: name of the figure to be saved in the ./figures/training_history folder
+    :return:
+    """
+    if labels is not None and not len(labels) == len(histories):
+        warnings.warn('The amount of labels should be equal to the amount of history dataframes!')
+        return 0
+
+    fig = plt.figure(figsize=(7, 5))
+    ax1 = plt.subplot()
+    # ax1.set_xlabel('Epoch')
+    # ax1.set_ylabel('Mean Square Error')
+    if labels is None and len(histories) == 1:
+        ax1.plot(histories[0]['epoch'], histories[0]['loss'],
+                 label='Training set')
+        ax1.plot(histories[0]['epoch'], histories[0]['val_loss'],
+                 label='Validation set')
+    else:
+        for i, hist in enumerate(histories):
+            ax1.plot(hist['epoch'], hist['loss'],
+                     label=labels[i] + ' training set')
+            ax1.plot(hist['epoch'], hist['val_loss'],
+                     label=labels[i] + ' validation set')
+    ax1.legend(fontsize=plot_font_size)
+
+    ax1.tick_params(labelsize=plot_font_size)
+
+    fig.add_subplot(ax1)
+    if not save_fig_as:
+        fig.show()
+    else:
+        saf.save_image_as(fig, './figures/training_history/', save_fig_as)
