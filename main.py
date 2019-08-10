@@ -299,7 +299,7 @@ if not load_or_create or 'l' == load_or_create.lower() or 'load' == load_or_crea
     train26_test1_all_set1_ann = ann.ANN(load_from_cache='201907292137_train26_test1_all_set1')
 
     # CASE 5: Train and test on all subjects
-    subject12356_all_set1_ann =  ann.ANN(load_from_cache='201907292139_subject12356_all_set1')
+    subject12356_all_set1_ann = ann.ANN(load_from_cache='201907292139_subject12356_all_set1')
 elif 'c' == load_or_create.lower() or 'create' == load_or_create.lower():
 
     # CASE 1: Training on one session and testing on the other (Subject06)
@@ -376,6 +376,10 @@ if plot_pre_analysis:
                         y_axis_range=(-0.6, 0.9), save_fig_as='subject01_all_set1_moment_avg')
     saf.plot_moment_avg(my_dm.list_of_pandas['subject02_all_set1_norm'], plot_font_size=24,
                         y_axis_range=(-0.6, 0.9), save_fig_as='subject02_all_set1_moment_avg')
+    saf.plot_moment_avg(my_dm.list_of_pandas['subject03_all_set1_norm'], plot_font_size=24,
+                        y_axis_range=(-0.65, 1), save_fig_as='subject03_all_set1_moment_avg')
+    saf.plot_moment_avg(my_dm.list_of_pandas['subject05_all_set1_norm'], plot_font_size=24,
+                        y_axis_range=(-0.65, 1), save_fig_as='subject05_all_set1_moment_avg')
     saf.plot_moment_avg(my_dm.list_of_pandas['subject06_all_set1_norm'], plot_font_size=24,
                         y_axis_range=(-0.6, 0.9), save_fig_as='subject06_all_set1_moment_avg')
 
@@ -383,73 +387,193 @@ if plot_pre_analysis:
                         y_axis_range=(-0.65, 1), save_fig_as='subject01_all_set1_moment_avg_w_minmax')
     saf.plot_moment_avg(my_dm.list_of_pandas['subject02_all_set1_norm'], plot_min_med_max=True, plot_font_size=24,
                         y_axis_range=(-0.65, 1), save_fig_as='subject02_all_set1_moment_avg_w_minmax')
+    saf.plot_moment_avg(my_dm.list_of_pandas['subject03_all_set1_norm'], plot_min_med_max=True, plot_font_size=24,
+                        y_axis_range=(-0.65, 1), save_fig_as='subject03_all_set1_moment_avg_w_minmax')
+    saf.plot_moment_avg(my_dm.list_of_pandas['subject05_all_set1_norm'], plot_min_med_max=True, plot_font_size=24,
+                        y_axis_range=(-0.65, 1), save_fig_as='subject05_all_set1_moment_avg_w_minmax')
     saf.plot_moment_avg(my_dm.list_of_pandas['subject06_all_set1_norm'], plot_min_med_max=True, plot_font_size=24,
                         y_axis_range=(-0.65, 1), save_fig_as='subject06_all_set1_moment_avg_w_minmax')
 
-    # saf.plot_cycle_time_quartile(subject01_all_set1_ann.train_dataset, title='Gait cycle duration quartile',
-    #                              save_fig_as='subject01_all_set1_cycle_duration_quartile')
-    # saf.plot_cycle_time_quartile(subject02_all_set1_ann.train_dataset, title='Gait cycle duration quartile',
-    #                              save_fig_as='subject02_all_set1_cycle_duration_quartile')
-    # saf.plot_cycle_time_quartile(subject06_all_set0_ann.train_dataset, title='Gait cycle duration quartile',
-    #                              save_fig_as='subject06_all_set1_cycle_duration_quartile')
+    saf.plot_mean_col_correlations(
+        [my_dm.list_of_pandas['subject01_all_set1_norm'], my_dm.list_of_pandas['subject02_all_set1_norm'],
+         my_dm.list_of_pandas['subject03_all_set1_norm'], my_dm.list_of_pandas['subject05_all_set1_norm'],
+         my_dm.list_of_pandas['subject06_all_set1_norm']],
+        ['Subject01', 'Subject02', 'Subject03', 'Subject05', 'Subject06'], 'Torque', method='pearson',
+        save_fig_as='KJM correlation between subjects')
 
-    # saf.plot_muscle_average(subject01_20190603_set0_ann.train_dataset, ['RectFem', 'VasMed', 'VasLat'], y_lim=(0, 0.99),
-    #                         plot_max_emg=True)
-
-    # analyzing_plots(subject01_20190405_set1_ann.train_dataset, title_spec='Subject01 20190405')
-    # analyzing_plots(subject01_20190603_set0_ann.train_dataset, title_spec='Subject01 20190603')
-    # analyzing_plots(subject02_20190406_set1_ann.train_dataset, title_spec='Subject02 20190406')
-    # analyzing_plots(subject02_20190608_set0_ann.train_dataset, title_spec='Subject02 20190608')
-    # analyzing_plots(subject06_20190429_set0_ann.train_dataset, title_spec='Subject06 20190429')
-    # analyzing_plots(subject06_20190509_set0_ann.train_dataset, title_spec='Subject06 20190509')
+    muscle_set1 = ['GlutMax', 'RectFem', 'VasMed', 'VasLat', 'BicFem', 'Semitend', 'TibAnt', 'Soleus', 'GasMed',
+                   'GasLat']
+    for muscle in muscle_set1:
+        saf.plot_mean_col_correlations(
+            [my_dm.list_of_pandas['subject01_all_set1_norm'], my_dm.list_of_pandas['subject02_all_set1_norm'],
+             my_dm.list_of_pandas['subject03_all_set1_norm'], my_dm.list_of_pandas['subject05_all_set1_norm'],
+             my_dm.list_of_pandas['subject06_all_set1_norm']],
+            ['Sub01', 'Sub02', 'Sub03', 'Sub05', 'Sub06'], muscle, method='pearson', title=muscle,
+            save_fig_as=muscle + ' correlation between subjects')
 
 # ----------------------------- Train ANNs on datasets ------------------------------- #
-train_models = True
+train_models = False
 if train_models:
     # CASE 1: Training on one session and testing on the other (Subject06)
-    subject06_allsplit_set1_ann.train_lstm(model_name='LSTM_adam_64_04_05_00_00_20_relu_sigmoid_bc1', optimizer='adam',
-                                           num_nodes=64, epochs=250, val_split=0.1, early_stop_patience=30,
+    subject06_allsplit_set1_ann.train_lstm(model_name='LSTM_adam_64_04_05_00_00_20_relu_sigmoid', optimizer='adam',
+                                           num_nodes=64, epochs=300, val_split=0.1, early_stop_patience=50,
                                            dropout_rate=0.4, recurrent_dropout_rate=0.5, l1_reg=0.0, l2_reg=0.0,
-                                           look_back=20, keep_training_model=True, initial_epoch=0, batch_size_case=1,
-                                           use_test_as_val=True, activation_func='relu',
+                                           look_back=20, keep_training_model=False, initial_epoch=0, batch_size_case=1,
+                                           use_test_as_val=False, activation_func='relu',
                                            recurrent_activation_func='hard_sigmoid')
+    subject06_allsplit_set1_ann.train_mlp(model_name='MLP_adam_64_64_03_03_relu',
+                                          layers_nodes=[(64, 'relu'), (64, 'relu')], optimizer='adam', epochs=300,
+                                          val_split=0.1, early_stop_patience=50, dropout_rates=[0.3, 0.3])
 
     # CASE 2: Include Subject01 and Subject02 to the training while still testing on unseen session of Subject06
-    subject126partial_all_set1_ann.train_lstm(model_name='LSTM_adam_64_04_05_00_00_20_relu_sigmoid_bc1',
-                                              optimizer='adam', num_nodes=64, epochs=250, val_split=0.1,
-                                              early_stop_patience=30, dropout_rate=0.4, recurrent_dropout_rate=0.5,
-                                              l1_reg=0.0, l2_reg=0.0, look_back=20, keep_training_model=True,
-                                              initial_epoch=0, batch_size_case=1, use_test_as_val=True,
+    subject126partial_all_set1_ann.train_lstm(model_name='LSTM_adam_64_04_05_00_00_20_relu_sigmoid',
+                                              optimizer='adam', num_nodes=64, epochs=300, val_split=0.1,
+                                              early_stop_patience=50, dropout_rate=0.4, recurrent_dropout_rate=0.5,
+                                              l1_reg=0.0, l2_reg=0.0, look_back=20, keep_training_model=False,
+                                              initial_epoch=0, batch_size_case=1, use_test_as_val=False,
                                               activation_func='relu', recurrent_activation_func='hard_sigmoid')
+    subject126partial_all_set1_ann.train_mlp(model_name='MLP_adam_64_64_03_03_relu', optimizer='adam', epochs=250,
+                                             val_split=0.1, early_stop_patience=50, dropout_rates=[0.3, 0.3])
 
     # CASE 3: Train on Subject06 and Subject01 and test on Subject02
-    train16_test2_all_set1_ann.train_lstm(model_name='LSTM_adam_64_04_05_00_00_20_relu_sigmoid_bc1', optimizer='adam',
-                                          num_nodes=64, epochs=250, val_split=0.1, early_stop_patience=30,
+    train16_test2_all_set1_ann.train_lstm(model_name='LSTM_adam_64_04_05_00_00_20_relu_sigmoid', optimizer='adam',
+                                          num_nodes=64, epochs=300, val_split=0.1, early_stop_patience=50,
                                           dropout_rate=0.4, recurrent_dropout_rate=0.5, l1_reg=0.0, l2_reg=0.0,
-                                          look_back=20, keep_training_model=True, initial_epoch=0, batch_size_case=1,
-                                          use_test_as_val=True, activation_func='relu',
+                                          look_back=20, keep_training_model=False, initial_epoch=0, batch_size_case=1,
+                                          use_test_as_val=False, activation_func='relu',
                                           recurrent_activation_func='hard_sigmoid')
+    train16_test2_all_set1_ann.train_mlp(model_name='MLP_adam_64_64_03_03_relu', optimizer='adam', epochs=300,
+                                         val_split=0.1, early_stop_patience=50, dropout_rates=[0.3, 0.3])
 
     # CASE 4: Train on Subject06 and Subject02 and test on Subject01
-    train26_test1_all_set1_ann.train_lstm(model_name='LSTM_adam_64_04_05_00_00_20_relu_sigmoid_bc1', optimizer='adam',
-                                          num_nodes=64, epochs=250, val_split=0.1, early_stop_patience=30,
+    train26_test1_all_set1_ann.train_lstm(model_name='LSTM_adam_64_04_05_00_00_20_relu_sigmoid', optimizer='adam',
+                                          num_nodes=64, epochs=300, val_split=0.1, early_stop_patience=50,
                                           dropout_rate=0.4, recurrent_dropout_rate=0.5, l1_reg=0.0, l2_reg=0.0,
-                                          look_back=20, keep_training_model=True, initial_epoch=0, batch_size_case=1,
-                                          use_test_as_val=True, activation_func='relu',
+                                          look_back=20, keep_training_model=False, initial_epoch=0, batch_size_case=1,
+                                          use_test_as_val=False, activation_func='relu',
                                           recurrent_activation_func='hard_sigmoid')
+    train26_test1_all_set1_ann.train_mlp(model_name='MLP_adam_64_64_03_03_relu', optimizer='adam', epochs=300,
+                                         val_split=0.1, early_stop_patience=50, dropout_rates=[0.3, 0.3])
 
     # CASE 5: Train and test on all subjects
-    subject12356_all_set1_ann.train_lstm(model_name='LSTM_adam_64_04_05_00_00_20_relu_sigmoid_bc1', optimizer='adam',
-                                         num_nodes=64, epochs=250, val_split=0.1, early_stop_patience=30,
+    subject12356_all_set1_ann.train_lstm(model_name='LSTM_adam_64_04_05_00_00_20_relu_sigmoid', optimizer='adam',
+                                         num_nodes=64, epochs=300, val_split=0.1, early_stop_patience=50,
                                          dropout_rate=0.4, recurrent_dropout_rate=0.5, l1_reg=0.0, l2_reg=0.0,
-                                         look_back=20, keep_training_model=True, initial_epoch=0, batch_size_case=1,
-                                         use_test_as_val=True, activation_func='relu',
+                                         look_back=20, keep_training_model=False, initial_epoch=0, batch_size_case=1,
+                                         use_test_as_val=False, activation_func='relu',
                                          recurrent_activation_func='hard_sigmoid')
-
+    subject12356_all_set1_ann.train_mlp(model_name='MLP_adam_64_64_03_03_relu', optimizer='adam', epochs=300,
+                                        val_split=0.1, early_stop_patience=50, dropout_rates=[0.3, 0.3])
 
 # ----------------------------- Evaluate trained models ------------------------------ #
-# subject06_LSTM_adam0001_64_02_00_4_relu_prediction = subject06_all_set1_ann.get_test_prediction(
-#     'LSTM_adam0001_64_02_00_4_relu', lstm=True, lstm_look_back=4)
-subject06_allsplit_set1_ann_LSTM_adam_64_02_05_10_relu_bc1 = subject06_allsplit_set1_ann.get_test_prediction(
-    model_name='LSTM_adam_64_02_05_10_relu_bc1', lstm=True, lstm_look_back=10)
+cache_predictions = False
+if cache_predictions:
+    # CASE 1: Training on one session and testing on the other (Subject06)
+    subject06_allsplit_set1_prediction = subject06_allsplit_set1_ann.get_test_prediction(
+        model_name='LSTM_adam_64_04_05_00_00_20_relu_sigmoid_best', lstm=True, lstm_look_back=20)
+    subject06_allsplit_set1_prediction.name = 'Case1_LSTM_Prediction'
+    my_dm.update_pandas(subject06_allsplit_set1_prediction)
 
+    # CASE 2: Include Subject01 and Subject02 to the training while still testing on unseen session of Subject06
+    subject126partial_all_set1_prediction = subject126partial_all_set1_ann.get_test_prediction(
+        model_name='LSTM_adam_64_04_05_00_00_20_relu_sigmoid_best', lstm=True, lstm_look_back=20)
+    subject126partial_all_set1_prediction.name = 'Case2_LSTM_Prediction'
+    my_dm.update_pandas(subject126partial_all_set1_prediction)
+
+    # CASE 3: Train on Subject06 and Subject01 and test on Subject02
+    train16_test2_all_set1_prediction = train16_test2_all_set1_ann.get_test_prediction(
+        model_name='LSTM_adam_64_04_05_00_00_20_relu_sigmoid_best', lstm=True, lstm_look_back=20)
+    train16_test2_all_set1_prediction.name = 'Case3_LSTM_Prediction'
+    my_dm.update_pandas(train16_test2_all_set1_prediction)
+
+    # CASE 4: Train on Subject06 and Subject02 and test on Subject01
+    train26_test1_all_set1_prediction = train26_test1_all_set1_ann.get_test_prediction(
+        model_name='LSTM_adam_64_04_05_00_00_20_relu_sigmoid_best', lstm=True, lstm_look_back=20)
+    train26_test1_all_set1_prediction.name = 'Case4_LSTM_Prediction'
+    my_dm.update_pandas(train26_test1_all_set1_prediction)
+
+    # CASE 5: Train and test on all subjects
+    subject12356_all_set1_prediction = subject12356_all_set1_ann.get_test_prediction(
+        model_name='LSTM_adam_64_04_05_00_00_20_relu_sigmoid_best', lstm=True, lstm_look_back=20)
+    subject12356_all_set1_prediction.name = 'Case5_LSTM_Prediction'
+    my_dm.update_pandas(subject12356_all_set1_prediction)
+
+evaluate_model = False
+if evaluate_model:
+    # saf.plot_moment_avg(my_dm.list_of_pandas['Case1_LSTM_Prediction'], plot_min_med_max=True, plot_worst=True)
+    # Case 1
+    subject06_allsplit_set1_ann.evaluate_model(model_name='LSTM_adam_64_04_05_00_00_20_relu_sigmoid_best', lstm=True,
+                                               lstm_look_back=20)
+    subject06_allsplit_set1_ann.evaluate_model(model_name='MLP_adam_64_64_04_04_relu_best')
+    subject06_allsplit_set1_ann.compare_model_training(['LSTM_adam_64_04_05_00_00_20_relu_sigmoid',
+                                                        'MLP_adam_64_64_04_04_relu'], labels=['LSTM', 'MLP'],
+                                                       plot_font_size=16,
+                                                       save_history_fig_as='Case1_LSTMvsMLP_training')
+    saf.compare_moment_avg(subject06_allsplit_set1_ann.test_dataset, my_dm.list_of_pandas['Case1_LSTM_Prediction'],
+                           df1_legend='Actual', df2_legend='Prediction', plot_font_size=16,
+                           save_fig_as='Case1_LSTM_test_prediction')
+
+    # Case 2
+    subject126partial_all_set1_ann.evaluate_model(model_name='LSTM_adam_64_04_05_00_00_20_relu_sigmoid_best', lstm=True,
+                                                  lstm_look_back=20)
+    subject126partial_all_set1_ann.evaluate_model(model_name='MLP_adam_64_64_03_03_relu_best')
+    subject126partial_all_set1_ann.compare_model_training(['LSTM_adam_64_04_05_00_00_20_relu_sigmoid',
+                                                           'MLP_adam_64_64_03_03_relu'], labels=['LSTM', 'MLP'],
+                                                          plot_font_size=16,
+                                                          save_history_fig_as='Case2_LSTMvsMLP_training')
+    saf.compare_moment_avg(subject126partial_all_set1_ann.test_dataset, my_dm.list_of_pandas['Case2_LSTM_Prediction'],
+                           df1_legend='Actual', df2_legend='Prediction', plot_font_size=16,
+                           save_fig_as='Case2_LSTM_test_prediction')
+
+    # Case 3
+    train16_test2_all_set1_ann.evaluate_model(model_name='LSTM_adam_64_04_05_00_00_20_relu_sigmoid_best', lstm=True,
+                                              lstm_look_back=20)
+    train16_test2_all_set1_ann.evaluate_model(model_name='MLP_adam_64_64_03_03_relu_best')
+    train16_test2_all_set1_ann.compare_model_training(['LSTM_adam_64_04_05_00_00_20_relu_sigmoid',
+                                                       'MLP_adam_64_64_03_03_relu'], labels=['LSTM', 'MLP'],
+                                                      plot_font_size=16,
+                                                      save_history_fig_as='Case3_LSTMvsMLP_training')
+    saf.compare_moment_avg(train16_test2_all_set1_ann.test_dataset, my_dm.list_of_pandas['Case3_LSTM_Prediction'],
+                           df1_legend='Actual', df2_legend='Prediction', plot_font_size=16,
+                           save_fig_as='Case3_LSTM_test_prediction')
+
+    # Case 4
+    train26_test1_all_set1_ann.evaluate_model(model_name='LSTM_adam_64_04_05_00_00_20_relu_sigmoid_best', lstm=True,
+                                              lstm_look_back=20)
+    train26_test1_all_set1_ann.evaluate_model(model_name='MLP_adam_64_64_03_03_relu_best')
+    train26_test1_all_set1_ann.compare_model_training(['LSTM_adam_64_04_05_00_00_20_relu_sigmoid',
+                                                       'MLP_adam_64_64_03_03_relu'], labels=['LSTM', 'MLP'],
+                                                      plot_font_size=16,
+                                                      save_history_fig_as='Case4_LSTMvsMLP_training')
+    saf.compare_moment_avg(train26_test1_all_set1_ann.test_dataset, my_dm.list_of_pandas['Case4_LSTM_Prediction'],
+                           df1_legend='Actual', df2_legend='Prediction', plot_font_size=16,
+                           save_fig_as='Case4_LSTM_test_prediction')
+
+    # Case 5
+    subject12356_all_set1_ann.evaluate_model(model_name='LSTM_adam_64_04_05_00_00_20_relu_sigmoid_best', lstm=True,
+                                             lstm_look_back=20)
+    subject12356_all_set1_ann.evaluate_model(model_name='MLP_adam_64_64_03_03_relu_best')
+    subject12356_all_set1_ann.compare_model_training(['LSTM_adam_64_04_05_00_00_20_relu_sigmoid',
+                                                      'MLP_adam_64_64_03_03_relu'], labels=['LSTM', 'MLP'],
+                                                     plot_font_size=16,
+                                                     save_history_fig_as='Case5_LSTMvsMLP_training')
+    saf.compare_moment_avg(subject12356_all_set1_ann.test_dataset, my_dm.list_of_pandas['Case5_LSTM_Prediction'],
+                           df1_legend='Actual', df2_legend='Prediction', plot_font_size=16,
+                           save_fig_as='Case5_LSTM_test_prediction')
+
+    # subject06_LSTM_adam0001_64_02_00_4_relu_prediction = subject06_all_set1_ann.get_test_prediction(
+    #     'LSTM_adam0001_64_02_00_4_relu', lstm=True, lstm_look_back=4)
+    # subject06_allsplit_set1_ann_LSTM_adam_64_02_05_10_relu_bc1 = subject06_allsplit_set1_ann.get_test_prediction(
+    #     model_name='LSTM_adam_64_02_05_10_relu_bc1', lstm=True, lstm_look_back=10)
+
+# Find out number of cycles from each session
+get_num_cycles = False
+if get_num_cycles:
+    subject01_session1 = len([trial for _, trial in my_dm.list_of_pandas['subject01_20190405_set1'].groupby('Trial')])
+    subject01_session2 = len([trial for _, trial in my_dm.list_of_pandas['subject01_20190603_set1'].groupby('Trial')])
+    subject02_session1 = len([trial for _, trial in my_dm.list_of_pandas['subject02_20190406_set1'].groupby('Trial')])
+    subject02_session2 = len([trial for _, trial in my_dm.list_of_pandas['subject02_20190608_set1'].groupby('Trial')])
+    subject03_session1 = len([trial for _, trial in my_dm.list_of_pandas['subject03_all_set1'].groupby('Trial')])
+    subject05_session1 = len([trial for _, trial in my_dm.list_of_pandas['subject05_all_set1'].groupby('Trial')])
+    subject06_session1 = len([trial for _, trial in my_dm.list_of_pandas['subject06_20190429_set1'].groupby('Trial')])
+    subject06_session2 = len([trial for _, trial in my_dm.list_of_pandas['subject06_20190509_set1'].groupby('Trial')])
