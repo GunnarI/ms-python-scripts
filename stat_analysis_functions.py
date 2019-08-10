@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from scipy import signal as scisig
+from scipy import stats as scistat
 
 
 def get_min_med_max_cycles(df):
@@ -192,6 +193,70 @@ def plot_moment_avg(df, plot_min_med_max=False, plot_worst=False, title=None, xl
         save_image_as(fig, './figures/moment_avg/', save_fig_as)
 
     return fig
+
+
+def compare_moment_avg(df1, df2, df1_legend='df1', df2_legend='df2', title=None, xlabel=None, ylabel=None,
+                       y_axis_range=None, plot_font_size=12, save_fig_as=None):
+    df1_copy = df1.copy()
+    df1_copy = df1_copy[df1_copy.Time >= 0]
+    df1_copy.reset_index(drop=True, inplace=True)
+
+    df2_copy = df2.copy()
+    df2_copy = df2_copy[df2_copy.Time >= 0]
+    df2_copy.reset_index(drop=True, inplace=True)
+
+    fig = plt.figure(figsize=(8, 5))
+    ax1 = plt.subplot()
+    fig.add_subplot(ax1)
+
+    trial_groups_df1 = [trial for _, trial in df1_copy.groupby('Trial')]
+    trial_groups_df2 = [trial for _, trial in df2_copy.groupby('Trial')]
+    xvec = np.arange(0, 101)
+    num_steps = len(xvec)
+    moments_df1 = np.zeros((len(trial_groups_df1), num_steps))
+    moments_df2 = np.zeros((len(trial_groups_df2), num_steps))
+    for i, df in enumerate(trial_groups_df1):
+        moments_df1[i, :] = resample_signal(df.Torque, num_steps)
+    for i, df in enumerate(trial_groups_df2):
+        moments_df2[i, :] = resample_signal(df.Torque, num_steps)
+
+    moment_avg_df1 = np.mean(moments_df1, axis=0)
+    moment_std_df1 = np.std(moments_df1, axis=0)
+    std_range_df1 = (moment_avg_df1 - moment_std_df1, moment_avg_df1 + moment_std_df1)
+
+    moment_avg_df2 = np.mean(moments_df2, axis=0)
+    moment_std_df2 = np.std(moments_df2, axis=0)
+    std_range_df2 = (moment_avg_df2 - moment_std_df2, moment_avg_df2 + moment_std_df2)
+
+    ax1.fill_between(xvec, std_range_df1[0], std_range_df1[1], alpha=0.2)
+    ax1.plot(xvec, moment_avg_df1, label=df1_legend)
+
+    ax1.fill_between(xvec, std_range_df2[0], std_range_df2[1], alpha=0.2)
+    ax1.plot(xvec, moment_avg_df2, label=df2_legend)
+    ax1.legend(fontsize=plot_font_size)
+
+    if title is not None:
+        ax1.set_title(title)
+    if xlabel is not None:
+        ax1.set_xlabel(xlabel, fontsize=plot_font_size)
+    if ylabel is not None:
+        ax1.set_ylabel(ylabel, fontsize=plot_font_size)
+
+    if y_axis_range is not None:
+        ax1.set_ylim(y_axis_range[0], y_axis_range[1])
+
+    if plot_font_size is not None:
+        ax1.tick_params(labelsize=plot_font_size)
+
+    fmt = '%.0f%%'
+    xticks = mtick.FormatStrFormatter(fmt)
+    ax1.xaxis.set_major_formatter(xticks)
+
+    fig.add_subplot(ax1)
+    if not save_fig_as:
+        fig.show()
+    else:
+        save_image_as(fig, './figures/moment_avg/', save_fig_as)
 
 
 def plot_muscle_average(df, muscle_list=None, ylabel=None, y_axis_range=None, plot_font_size=12, save_fig_as=None,):
