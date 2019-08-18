@@ -1,8 +1,12 @@
 # Real-time joint moment prediction using ML models on sEMG
 ## Description
 This repository offers an API for data processing and building a Neural Network (NN) for predicting joint moment from 
-EMG data. The code is written and tested only for the case where:
-1. Data was exported using 
+EMG data. Some of the functions might be partly unfinished and/or buggy. The code is written and tested only for the 
+case where:
+1. Data was exported using Vicon Nexus 2.8.2 ASCII export to .csv files.
+2. Data was imported by looking for specific fields for EMG sensors and knee joint moments model outputs.
+3. Naming of folders and files and the information in session_config.json file is exactly like described below in *Data 
+storage and structure*.
 
 ## Notes and requirements
 1. Python 3 needs to be installed. The code was written for Python 3.6.8 and has not been tested with any other version.
