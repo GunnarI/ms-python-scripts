@@ -2,5 +2,6 @@
 __pycache__
 venv/
 temporary.py
-data/
+cache/
 figures/
+data_structure.json
