@@ -1,0 +1,215 @@
+<?xml version="1.1" encoding="UTF-8" standalone="no" ?>
+<Pipeline>
+
+  <Entry DisplayName="Export C3D" Enabled="1" OperationId="221" OperationName="Exportc3d">
+    <ParamList name="">
+      <Param macro="CURRENT_TRIAL" name="Filename"/>
+      <Param macro="SELECTED_START_FRAME" name="StartFrame"/>
+      <Param macro="SELECTED_END_FRAME" name="EndFrame"/>
+      <Param name="Postfix" value=""/>
+      <Param name="IntegerFormat" value="false"/>
+      <Param name="SubjectPrefix" value="1"/>
+      <Param name="XAxis" value="4"/>
+      <Param name="YAxis" value="2"/>
+      <Param name="ZAxis" value="0"/>
+      <Param name="ProcessingClip"/>
+      <Param name="CopyToClip"/>
+    </ParamList>
+  </Entry>
+
+  <Entry DisplayName="Run pyCGM2-CGM2_3- Fitting" Enabled="1" OperationId="169" OperationName="Python">
+    <ParamList name="">
+      <Param name="Script" value="<your-system-specific-path-to-script>/CGM2_3/nexusOperation-pyCGM2-CGM2_3-Fitting.py"/>
+      <Param name="ScriptArgs" value="-md=9.5"/>
+      <Param name="UseNexusPython" value="false"/>
+      <Param name="LaunchPython" value="false"/>
+    </ParamList>
+  </Entry>
+
+  <Entry DisplayName="Save Trial - C3D + VSK" Enabled="1" OperationId="73" OperationName="SaveOperation">
+    <ParamList name="">
+      <Param macro="SELECTED_START_FRAME" name="StartFrame"/>
+      <Param macro="SELECTED_END_FRAME" name="EndFrame"/>
+    </ParamList>
+  </Entry>
+
+  <Entry DisplayName="Export ASCII" Enabled="1" OperationId="0" OperationName="Export Ascii">
+    <ParamList name="" version="1">
+      <Param macro="CURRENT_TRIAL" name="Filename"/>
+      <Param macro="CSV_EXTENSION" name="File Extension"/>
+      <Param macro="SELECTED_START_FRAME" name="StartFrame"/>
+      <Param macro="SELECTED_END_FRAME" name="EndFrame"/>
+      <Param macro="CHAR_DELIMETER" name="Delimiter"/>
+      <Param name="HelicalUnit" value="Deg"/>
+      <Param name="AngleRepresentation" value="Helical"/>
+      <Param name="Gait Cycle Selection" value="false"/>
+      <Param name="Event Selection" value="true"/>
+      <Param name="DeviceSampling" value="DeviceSamplingMX"/>
+      <Param macro="ALL_DEVICES" name="Devices"/>
+      <Param macro="NO_DEVICES" name="Devices'"/>
+      <Param macro="NO_DEVICES" name="Devices''"/>
+      <Param macro="NO_DEVICES" name="Devices Combined Forceplates"/>
+      <Param macro="NO_DEVICES" name="Devices Combined Forceplates'"/>
+      <Param macro="NO_DEVICES" name="Devices Combined Forceplates''"/>
+      <Param macro="NO_JOINTS" name="Joints Kinematics"/>
+      <Param macro="NO_JOINTS" name="Joints Kinematics'"/>
+      <Param macro="NO_JOINTS" name="Joints Kinematics''"/>
+      <Param macro="ALL_TRACES" name="Model Outputs Model Outputs"/>
+      <Param macro="NO_TRACES" name="Model Outputs Model Outputs'"/>
+      <Param macro="NO_TRACES" name="Model Outputs Model Outputs''"/>
+      <Param macro="NO_TRACES" name="Model Outputs Modeled Markers"/>
+      <Param macro="NO_TRACES" name="Model Outputs Modeled Markers'"/>
+      <Param macro="NO_TRACES" name="Model Outputs Modeled Markers''"/>
+      <Param macro="NO_SEGMENTS" name="Segments Global Angle"/>
+      <Param macro="NO_SEGMENTS" name="Segments Global Angle'"/>
+      <Param macro="NO_SEGMENTS" name="Segments Global Angle''"/>
+      <Param macro="NO_MARKERS" name="TrajectoryMarkers Components"/>
+      <Param macro="NO_MARKERS" name="TrajectoryMarkers Components'"/>
+      <Param macro="NO_MARKERS" name="TrajectoryMarkers Components''"/>
+      <Param macro="NO_MARKERS" name="TrajectoryMarkers Distance From Origin"/>
+      <Param macro="NO_MARKERS" name="TrajectoryMarkers Distance From Origin'"/>
+      <Param macro="NO_MARKERS" name="TrajectoryMarkers Distance From Origin''"/>
+      <Param name="TrajectoryMarkers Trajectory Count"/>
+      <Param name="TrajectoryMarkers Trajectory Count'"/>
+      <Param name="TrajectoryMarkers Trajectory Count''"/>
+      <Param name="TrajectorySelection"/>
+      <Param name="JointSelection"/>
+      <Param name="SegmentSelection"/>
+      <Param name="TraceSelection"/>
+      <Param name="Devices Absorbed Dose" value="false"/>
+      <Param name="Devices Absorbed Dose'" value="false"/>
+      <Param name="Devices Absorbed Dose''" value="false"/>
+      <Param name="Devices Acceleration" value="false"/>
+      <Param name="Devices Acceleration'" value="false"/>
+      <Param name="Devices Acceleration''" value="false"/>
+      <Param name="Devices Amount of Substance" value="false"/>
+      <Param name="Devices Amount of Substance'" value="false"/>
+      <Param name="Devices Amount of Substance''" value="false"/>
+      <Param name="Devices Angle" value="false"/>
+      <Param name="Devices Angle'" value="false"/>
+      <Param name="Devices Angle''" value="false"/>
+      <Param name="Devices Angular Acceleration" value="false"/>
+      <Param name="Devices Angular Acceleration'" value="false"/>
+      <Param name="Devices Angular Acceleration''" value="false"/>
+      <Param name="Devices Angular Velocity" value="false"/>
+      <Param name="Devices Angular Velocity'" value="false"/>
+      <Param name="Devices Angular Velocity''" value="false"/>
+      <Param name="Devices Area" value="false"/>
+      <Param name="Devices Area'" value="false"/>
+      <Param name="Devices Area''" value="false"/>
+      <Param name="Devices Catalytic Activity" value="false"/>
+      <Param name="Devices Catalytic Activity'" value="false"/>
+      <Param name="Devices Catalytic Activity''" value="false"/>
+      <Param name="Devices CoP" value="false"/>
+      <Param name="Devices CoP'" value="false"/>
+      <Param name="Devices CoP''" value="false"/>
+      <Param name="Devices Electric Capacitance" value="false"/>
+      <Param name="Devices Electric Capacitance'" value="false"/>
+      <Param name="Devices Electric Capacitance''" value="false"/>
+      <Param name="Devices Electric Charge" value="false"/>
+      <Param name="Devices Electric Charge'" value="false"/>
+      <Param name="Devices Electric Charge''" value="false"/>
+      <Param name="Devices Electric Conductance" value="false"/>
+      <Param name="Devices Electric Conductance'" value="false"/>
+      <Param name="Devices Electric Conductance''" value="false"/>
+      <Param name="Devices Electric Current" value="false"/>
+      <Param name="Devices Electric Current'" value="false"/>
+      <Param name="Devices Electric Current''" value="false"/>
+      <Param name="Devices Electric Potential" value="false"/>
+      <Param name="Devices Electric Potential'" value="false"/>
+      <Param name="Devices Electric Potential''" value="false"/>
+      <Param name="Devices Electric Resistance" value="false"/>
+      <Param name="Devices Electric Resistance'" value="false"/>
+      <Param name="Devices Electric Resistance''" value="false"/>
+      <Param name="Devices Equivalent Dose" value="false"/>
+      <Param name="Devices Equivalent Dose'" value="false"/>
+      <Param name="Devices Equivalent Dose''" value="false"/>
+      <Param name="Devices Eye" value="false"/>
+      <Param name="Devices Eye'" value="false"/>
+      <Param name="Devices Eye''" value="false"/>
+      <Param name="Devices Foot Switch" value="false"/>
+      <Param name="Devices Foot Switch'" value="false"/>
+      <Param name="Devices Foot Switch''" value="false"/>
+      <Param name="Devices Force" value="false"/>
+      <Param name="Devices Force'" value="false"/>
+      <Param name="Devices Force''" value="false"/>
+      <Param name="Devices Frequency" value="false"/>
+      <Param name="Devices Frequency'" value="false"/>
+      <Param name="Devices Frequency''" value="false"/>
+      <Param name="Devices Gaze" value="false"/>
+      <Param name="Devices Gaze'" value="false"/>
+      <Param name="Devices Gaze''" value="false"/>
+      <Param name="Devices Illuminance" value="false"/>
+      <Param name="Devices Illuminance'" value="false"/>
+      <Param name="Devices Illuminance''" value="false"/>
+      <Param name="Devices Inductance" value="false"/>
+      <Param name="Devices Inductance'" value="false"/>
+      <Param name="Devices Inductance''" value="false"/>
+      <Param name="Devices Length" value="false"/>
+      <Param name="Devices Length'" value="false"/>
+      <Param name="Devices Length''" value="false"/>
+      <Param name="Devices Luminous Flux" value="false"/>
+      <Param name="Devices Luminous Flux'" value="false"/>
+      <Param name="Devices Luminous Flux''" value="false"/>
+      <Param name="Devices Luminous Intensity" value="false"/>
+      <Param name="Devices Luminous Intensity'" value="false"/>
+      <Param name="Devices Luminous Intensity''" value="false"/>
+      <Param name="Devices Magnetic Flux" value="false"/>
+      <Param name="Devices Magnetic Flux'" value="false"/>
+      <Param name="Devices Magnetic Flux''" value="false"/>
+      <Param name="Devices Magnetic Flux Density" value="false"/>
+      <Param name="Devices Magnetic Flux Density'" value="false"/>
+      <Param name="Devices Magnetic Flux Density''" value="false"/>
+      <Param name="Devices Mass" value="false"/>
+      <Param name="Devices Mass'" value="false"/>
+      <Param name="Devices Mass''" value="false"/>
+      <Param name="Devices Moment" value="false"/>
+      <Param name="Devices Moment'" value="false"/>
+      <Param name="Devices Moment''" value="false"/>
+      <Param name="Devices Power" value="false"/>
+      <Param name="Devices Power'" value="false"/>
+      <Param name="Devices Power''" value="false"/>
+      <Param name="Devices Pressure" value="false"/>
+      <Param name="Devices Pressure'" value="false"/>
+      <Param name="Devices Pressure''" value="false"/>
+      <Param name="Devices Radioactivity" value="false"/>
+      <Param name="Devices Radioactivity'" value="false"/>
+      <Param name="Devices Radioactivity''" value="false"/>
+      <Param name="Devices Raw" value="false"/>
+      <Param name="Devices Raw'" value="false"/>
+      <Param name="Devices Raw''" value="false"/>
+      <Param name="Devices Reaction Force" value="false"/>
+      <Param name="Devices Reaction Force'" value="false"/>
+      <Param name="Devices Reaction Force''" value="false"/>
+      <Param name="Devices Reaction Moment" value="false"/>
+      <Param name="Devices Reaction Moment'" value="false"/>
+      <Param name="Devices Reaction Moment''" value="false"/>
+      <Param name="Devices Solid Angle" value="false"/>
+      <Param name="Devices Solid Angle'" value="false"/>
+      <Param name="Devices Solid Angle''" value="false"/>
+      <Param name="Devices Thermodynamic Temperature" value="false"/>
+      <Param name="Devices Thermodynamic Temperature'" value="false"/>
+      <Param name="Devices Thermodynamic Temperature''" value="false"/>
+      <Param name="Devices Time" value="false"/>
+      <Param name="Devices Time'" value="false"/>
+      <Param name="Devices Time''" value="false"/>
+      <Param name="Devices Torque" value="false"/>
+      <Param name="Devices Torque'" value="false"/>
+      <Param name="Devices Torque''" value="false"/>
+      <Param name="Devices Velocity" value="false"/>
+      <Param name="Devices Velocity'" value="false"/>
+      <Param name="Devices Velocity''" value="false"/>
+      <Param name="Devices Voltage" value="false"/>
+      <Param name="Devices Voltage'" value="false"/>
+      <Param name="Devices Voltage''" value="false"/>
+      <Param name="Devices Volume" value="false"/>
+      <Param name="Devices Volume'" value="false"/>
+      <Param name="Devices Volume''" value="false"/>
+      <Param name="Devices Work" value="false"/>
+      <Param name="Devices Work'" value="false"/>
+      <Param name="Devices Work''" value="false"/>
+      <Param name="Localise" value="false"/>
+    </ParamList>
+  </Entry>
+
+</Pipeline>

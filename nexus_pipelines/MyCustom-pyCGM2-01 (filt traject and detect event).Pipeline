@@ -1,0 +1,130 @@
+<?xml version="1.1" encoding="UTF-8" standalone="no" ?>
+<Pipeline>
+
+  <Entry DisplayName="Spline Fill Small Gaps" Enabled="1" OperationId="103" OperationName="FillGapsWoltring">
+    <ParamList name="">
+      <Param name="MaxGapToFill" value="0.050000000000000003"/>
+      <Param name="MaxGapFillType" value="0"/>
+      <Param macro="SELECTED_START_FRAME" name="START_FRAME"/>
+      <Param macro="SELECTED_END_FRAME" name="LAST_FRAME"/>
+    </ParamList>
+  </Entry>
+
+  <Entry DisplayName="Fill Head" Enabled="1" OperationId="104" OperationName="FillGapsRigidBody">
+    <ParamList name="">
+      <Param name="MaxGapToFill" value="0.5"/>
+      <Param name="MaxGapFillType" value="1"/>
+      <Param macro="SELECTED_START_FRAME" name="FirstFrame"/>
+      <Param macro="SELECTED_END_FRAME" name="LastFrame"/>
+      <Param name="Trajectories" value="LFHD,RFHD,LBHD,RBHD"/>
+    </ParamList>
+  </Entry>
+
+  <Entry DisplayName="Fill Thorax" Enabled="1" OperationId="105" OperationName="FillGapsRigidBody">
+    <ParamList name="">
+      <Param name="MaxGapToFill" value="0.5"/>
+      <Param name="MaxGapFillType" value="1"/>
+      <Param macro="SELECTED_START_FRAME" name="FirstFrame"/>
+      <Param macro="SELECTED_END_FRAME" name="LastFrame"/>
+      <Param name="Trajectories" value="C7,T10,CLAV,STRN,RBAK"/>
+    </ParamList>
+  </Entry>
+
+  <Entry DisplayName="Fill Pelvis" Enabled="1" OperationId="106" OperationName="FillGapsRigidBody">
+    <ParamList name="">
+      <Param name="MaxGapToFill" value="0.5"/>
+      <Param name="MaxGapFillType" value="1"/>
+      <Param macro="SELECTED_START_FRAME" name="FirstFrame"/>
+      <Param macro="SELECTED_END_FRAME" name="LastFrame"/>
+      <Param name="Trajectories" value="LASI,RASI,LPSI,RPSI"/>
+    </ParamList>
+  </Entry>
+
+  <Entry DisplayName="Pattern Fill" Enabled="1" OperationId="107" OperationName="FillGapsPattern">
+    <ParamList name="">
+      <Param name="MaxGapToFill" value="1"/>
+      <Param name="MaxGapFillType" value="1"/>
+      <Param macro="SELECTED_START_FRAME" name="START_FRAME"/>
+      <Param macro="SELECTED_END_FRAME" name="LAST_FRAME"/>
+      <Param macro="ALL_MARKERS" name="Trajectories"/>
+      <Param macro="AUTO_DONOR_MARKERS" name="DonorTraj"/>
+      <Param name="AllowUnlabeled" value="false"/>
+      <Param name="AllowDifferentSegment" value="false"/>
+    </ParamList>
+  </Entry>
+
+  <Entry DisplayName="Fill Gaps - Cyclic" Enabled="1" OperationId="108" OperationName="FillGapsCyclic">
+    <ParamList name="">
+      <Param name="MaxGapToFill" value="25"/>
+      <Param name="MaxGapFillType" value="0"/>
+      <Param macro="SELECTED_START_FRAME" name="START_FRAME"/>
+      <Param macro="SELECTED_END_FRAME" name="LAST_FRAME"/>
+      <Param macro="SELECTED_MARKERS" name="Trajectories"/>
+    </ParamList>
+  </Entry>
+
+  <Entry DisplayName="Export C3D" Enabled="1" OperationId="109" OperationName="Exportc3d">
+    <ParamList name="">
+      <Param macro="CURRENT_TRIAL" name="Filename"/>
+      <Param macro="SELECTED_START_FRAME" name="StartFrame"/>
+      <Param macro="SELECTED_END_FRAME" name="EndFrame"/>
+      <Param name="Postfix" value=""/>
+      <Param name="IntegerFormat" value="false"/>
+      <Param name="SubjectPrefix" value="1"/>
+      <Param name="XAxis" value="4"/>
+      <Param name="YAxis" value="2"/>
+      <Param name="ZAxis" value="0"/>
+      <Param name="ProcessingClip"/>
+      <Param name="CopyToClip"/>
+    </ParamList>
+  </Entry>
+
+  <Entry DisplayName="MoGapFill-Kalman" Enabled="1" OperationId="110" OperationName="Python">
+    <ParamList name="">
+      <Param name="Script" value="<your-system-specific-path-to-script>/MoGapFill/nexusOperation_KalmanGapFilling.py"/>
+      <Param name="ScriptArgs"/>
+      <Param name="UseNexusPython" value="false"/>
+      <Param name="LaunchPython" value="false"/>
+    </ParamList>
+  </Entry>
+
+  <Entry DisplayName="Filter Trajectories - Butterworth" Enabled="1" OperationId="111" OperationName="FilterTrajectoriesButterworth">
+    <ParamList name="">
+      <Param macro="SELECTED_START_FRAME" name="FirstFrame"/>
+      <Param macro="SELECTED_END_FRAME" name="LastFrame"/>
+      <Param name="CutoffFrequency" value="10"/>
+      <Param name="FilterOrder" value="1"/>
+      <Param name="FilterType" value="0"/>
+      <Param macro="ALL_TRAJECTORIES" name="Trajectories"/>
+    </ParamList>
+  </Entry>
+
+  <Entry DisplayName="Detect Events From Forceplate" Enabled="1" OperationId="0" OperationName="Vicon Gait Model - Detect Events">
+    <ParamList name="" version="1">
+      <Param macro="ACTIVE_SUBJECTS" name="SUBJECTS"/>
+      <Param macro="SELECTED_START_FRAME" name="FirstFrame"/>
+      <Param macro="SELECTED_END_FRAME" name="LastFrame"/>
+      <Param name="ForceThresh" value="20"/>
+      <Param macro="LTOE" name="LeftAntMarker"/>
+      <Param macro="LANK" name="LeftPostMarker"/>
+      <Param macro="RTOE" name="RightAntMarker"/>
+      <Param macro="RANK" name="RightPostMarker"/>
+    </ParamList>
+  </Entry>
+
+  <Entry DisplayName="Autocorrelate Events" Enabled="1" OperationId="101" OperationName="Vicon Gait Model - Autocorrelate Events">
+    <ParamList name="" version="1">
+      <Param macro="ACTIVE_SUBJECTS" name="SUBJECTS"/>
+      <Param macro="SELECTED_START_FRAME" name="FirstFrame"/>
+      <Param macro="SELECTED_END_FRAME" name="LastFrame"/>
+      <Param name="ForwardOnly" value="false"/>
+      <Param macro="LANK" name="LeftMarker"/>
+      <Param name="LeftComponent" value="2"/>
+      <Param name="LeftDerivative" value="0"/>
+      <Param macro="RANK" name="RightMarker"/>
+      <Param name="RightComponent" value="2"/>
+      <Param name="RightDerivative" value="0"/>
+    </ParamList>
+  </Entry>
+
+</Pipeline>
