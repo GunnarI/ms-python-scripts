@@ -398,8 +398,8 @@ if plot_pre_analysis:
         [my_dm.list_of_pandas['subject01_all_set1_norm'], my_dm.list_of_pandas['subject02_all_set1_norm'],
          my_dm.list_of_pandas['subject03_all_set1_norm'], my_dm.list_of_pandas['subject05_all_set1_norm'],
          my_dm.list_of_pandas['subject06_all_set1_norm']],
-        ['Subject01', 'Subject02', 'Subject03', 'Subject05', 'Subject06'], 'Torque', method='pearson',
-        save_fig_as='KJM correlation between subjects')
+        ['S1', 'S2', 'S3', 'S5', 'S6'], 'Torque', method='pearson', title="KJM", plot_font_size=20,
+        save_fig_as='KJM_correlation_between_subjects')
 
     muscle_set1 = ['GlutMax', 'RectFem', 'VasMed', 'VasLat', 'BicFem', 'Semitend', 'TibAnt', 'Soleus', 'GasMed',
                    'GasLat']
@@ -408,8 +408,8 @@ if plot_pre_analysis:
             [my_dm.list_of_pandas['subject01_all_set1_norm'], my_dm.list_of_pandas['subject02_all_set1_norm'],
              my_dm.list_of_pandas['subject03_all_set1_norm'], my_dm.list_of_pandas['subject05_all_set1_norm'],
              my_dm.list_of_pandas['subject06_all_set1_norm']],
-            ['Sub01', 'Sub02', 'Sub03', 'Sub05', 'Sub06'], muscle, method='pearson', title=muscle,
-            save_fig_as=muscle + ' correlation between subjects')
+            ['S1', 'S2', 'S3', 'S5', 'S6'], muscle, method='pearson', title=muscle, plot_font_size=20,
+            save_fig_as=muscle + '_correlation_between_subjects')
 
 # ----------------------------- Train ANNs on datasets ------------------------------- #
 train_models = False
