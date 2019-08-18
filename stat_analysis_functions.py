@@ -67,7 +67,8 @@ def plot_muscle_correlations(df, method='pearson', include_torque=False, title=N
     return fig
 
 
-def plot_mean_col_correlations(dfs, df_names, col_name, method='pearson', title=None, save_fig_as=None):
+def plot_mean_col_correlations(dfs, df_names, col_name, method='pearson', title=None, plot_font_size=12,
+                               save_fig_as=None):
 
     joint_df = pd.DataFrame(columns=df_names)
 
@@ -94,9 +95,11 @@ def plot_mean_col_correlations(dfs, df_names, col_name, method='pearson', title=
     correlation_matrix = joint_df.corr(method=method)
 
     plt.figure()
+    plt.rcParams['font.size'] = plot_font_size
     if title is not None:
         plt.title(title)
-    sns_plot = sns.heatmap(correlation_matrix, annot=True, fmt=".2f", vmin=-1, vmax=1)
+    sns_plot = sns.heatmap(correlation_matrix, annot=True, fmt=".2f", vmin=-1, vmax=1,
+                           annot_kws={"size": plot_font_size})
 
     fig = sns_plot.get_figure()
 
