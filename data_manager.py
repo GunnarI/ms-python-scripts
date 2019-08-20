@@ -4,7 +4,6 @@ import csv
 import json
 import warnings
 import logging
-import re
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -82,6 +81,11 @@ class DataManager:
         self.filt_concat_data_dict = {}
         self.list_of_pandas = {}
 
+        if not os.path.exists(cache_path):
+            os.makedirs(cache_path + '/dataframes')
+            os.makedirs(cache_path + '/raw_data/input')
+            os.makedirs(cache_path + '/raw_data/labels')
+
         if os.path.exists(root_dir + 'data_structure.json'):
             with open(root_dir + 'data_structure.json', 'r') as ds:
                 self.data_struct = json.load(ds)
@@ -119,7 +123,6 @@ class DataManager:
         :param subject_id: the subject id from the data structure (e.g. "Subject01")
         :param session_id: the session id from the data structure (e.g. "20190405")
         :param reload: if True then the already saved txt files are overridden with values from the csv
-        :param load_filt: if True then the already saved txt files with filtered data is loaded as Pandas.DataFrame
         :return: nothing, only updates the class variables DataManager.emg_data_dict and DataManager.torque_data_dict
         """
         for subject in self.data_struct:
@@ -270,7 +273,6 @@ class DataManager:
                                            (df.to_numpy()[:, 0] <= cycles_dict[cycle]['End'])]
                 data_cycle[:, 0] = (np.array(data_cycle[:, 0]).astype(dtype=float) -
                                     cycles_dict[cycle]['Start']).round(decimals=t_round_decim)
-                # data_cycle[:, trial_col_loc] = ids[0] + ids[2] + cycle
                 trial_names.append([ids[0] + ids[2] + cycle]*len(data_cycle))
                 data_to_cache.append(data_cycle)
 
@@ -495,7 +497,6 @@ def get_torque_from_csv(file, torque_id, frame_freq):
 
         reader = csv.reader(f, delimiter=',')
 
-        # first_col = next(reader).index(torque_id)
         model_output_list = next(reader)
         assert (torque_id in model_output_list), "No moment model output found in file: " + file
         first_col = model_output_list.index(torque_id)

@@ -4,12 +4,10 @@ import warnings
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
 from pathlib import Path
-import pickle
 import time
 import pandas as pd
 import numpy as np
 
-import tensorflow as tf
 from tensorflow.python import keras
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras import layers
@@ -22,11 +20,23 @@ import stat_analysis_functions as saf
 
 class ANN:
     def __init__(self, dataset=None, spec_cache_code=None, load_from_cache=None, load_models=None,
-                 train_dataset=None, test_dataset=None, normalize_data=True):
+                 train_dataset=None, test_dataset=None, normalize_data=False):
+        """
+        An instance of this class contains one dataset, including one train_dataset and one test_dataset as subsets.
+        The instance can hold references to many ANN models though. The models can be trained with specific parameters
+        and are then stored using unique names.
+
+        :param pandas.DataFrame dataset: holds the whole dataset (i.e. training and testing datasets combined).
+        :param str spec_cache_code: each instance creates a specific cache folder in ./cache/ann/ where the name of the folder is a timestamp at the time of creation, followed by this spec_cache_code which typically describes the dataset used (e.g. 'subject01_upper_right_leg_emg')
+        :param str load_from_cache: this should have the whole name of the cache directory that is desired to load, i.e. the timestamp and the spec_cache_code such as for example: '201908202032_subject01_upper_right_leg_emg'. If it is desired to load a cached ANN instance, then this is the only init parameter that should be assigned (except for load_models in some cases).
+        :param List[str] load_models: sometimes when loading a cached ANN instance one does not need to look at all the models it has trained and cached. In that case, load_models can contain a list of model names that are desired to load.
+        :param pandas.DataFrame train_dataset: the internal dataset split method selects random train_dataset and test_dataset from the dataset variable. If it is desired to select your own subset for the train_dataset then it can be assigned through this parameter.
+        :param pandas.DataFrame test_dataset: same principle as for the train_dataset but here you would typically have another subset which will not be introduced to the neural network, and only used for testing.
+        :param normalize_data: if this is true and the internal method for splitting the dataset into training and testing, then the classic min_max normalization method will be used on the data and the test_dataset will be normalized using the min and max from the train_dataset. It is recommended to split the dataset and normalize them before creating the ANN instance.
+        """
         self.models = {}
         self.model_histories = {}
         self.model_sessions = {}
-        # self.model_predictions = {}
         if load_from_cache is None and dataset is not None:
             self.cache_path = ''
             self.create_cache_dir(spec_cache_code)
@@ -45,7 +55,6 @@ class ANN:
             self.normalized_dataset = self.dataset
             self.save_datasets()
         else:
-
             if load_from_cache is None:
                 cached_folders = Path('./cache/ann/').glob('[0-9]*?*')
                 newest_cache = 0
@@ -66,7 +75,7 @@ class ANN:
             else:
                 raise ValueError('A cache path for ' + load_from_cache + ' was not found and no datasets given.')
 
-    def create_train_and_test(self, frac=0.8, randomize_by_trial=True, validation_frac=0.2):
+    def create_train_and_test(self, frac=0.8, randomize_by_trial=True):
         """ Splits a pandas.DataFrame into train-, and test-dataset
 
         :param df: The DataFrame
@@ -78,7 +87,7 @@ class ANN:
         :return: the two datasets for training and testing: train_dataset, test_dataset
         """
         dataset = self.dataset.copy()
-        train_dataset, test_dataset = split_df_by_frac(dataset, frac=0.8, randomize_by_trial=True)
+        train_dataset, test_dataset = split_df_by_frac(dataset, frac=frac, randomize_by_trial=randomize_by_trial)
 
         self.train_dataset = train_dataset.reset_index(drop=True)
         self.test_dataset = test_dataset.reset_index(drop=True)
@@ -115,12 +124,12 @@ class ANN:
                 See https://keras.io/initializers/ \n
                 :param str optimizer: the optimizer used for the training, limited to 'rmsprop' or 'adam' (default 'rmsprop').
                 See https://keras.io/optimizers/ \n
-                :param float learning_rate: the learning rate used for the optimizer. If None then the internal default of the optimizer is used
+                :param float learning_rate: the learning rate used for the optimizer. If None then the internal default of the optimizer is used.
                 :param str model_name: the name of the model as it will be saved in cache and self.models (default 'lstm').
-                :param int num_nodes: the number of hidden nodes in each unfolded LSTM layer (each timestep)
+                :param int num_nodes: the number of hidden nodes in each unfolded LSTM layer (each timestep).
                 :param int epochs: number of epochs to run (default: 100). The number needs to be larger than initial_epoch (see initial_epoch).
-                :param float val_split: a percentage of dataset used as validation set, can be from 0 to 1 (default: 0.2)
-                :param int early_stop_patience: number of epochs used for the keras.callbacks.EarlyStopping, monitoring the validation loss (default: None)
+                :param float val_split: a percentage of dataset used as validation set, can be from 0 to 1 (default: 0.2).
+                :param int early_stop_patience: number of epochs used for the keras.callbacks.EarlyStopping, monitoring the validation loss (default: None).
                 :param float dropout_rate: float between 0 and 1. Fraction of the units to drop for the linear transformation of the inputs (default: 0.1).
                 :param float recurrent_dropout_rate: float between 0 and 1. Fraction of the units to drop for the linear transformation of the recurrent state (default: 0.3).
                 :param int look_back: number of timesteps to include for each sample input to the LSTM (default: 3).
@@ -128,7 +137,7 @@ class ANN:
                 :param bool tensorboard: if True then tensorboard callback is used (default: True).
                 :param bool keep_training_model: if model_name already exists in cache and keep_training_model is True then training of the model continues from the point when it was cached (default: False).
                 :param int initial_epoch: the epoch number to start from (default: 0). If restarting training from cached model then this value should typically be the next epoch number from where the cached model stopped.
-                :param int batch_size_case: either 1 or 2 (default: 1). Case 1 makes all the cycles of equal length by zero padding and uses batch size as the length of these cycles
+                :param int batch_size_case: either 1 or 2 (default: 1). Case 1 makes all the cycles of equal length by zero padding and uses batch size as the length of these cycles.
                 :return:
                 """
         x_train, y_train, longest_cycle = gen_lstm_dataset(self.train_dataset.copy(), look_back,
@@ -352,8 +361,6 @@ class ANN:
 
         self.load_models(model_name=model_name + '_best')
 
-        # TODO: Reconsider the use of model_copy, it is the same as model_best except maybe the session graph... but...
-        # the session graph could allow one to keep training from the point of best result rather than most recent.
         K.set_session(self.model_sessions[model_name + '_best'])
         with K.get_session().graph.as_default():
             trained_weights = self.models[model_name + '_best'].get_weights()
@@ -462,7 +469,6 @@ class ANN:
         list_of_hist_dfs = [self.model_histories[model_name] for model_name in model_names]
         plot_history(list_of_hist_dfs, labels=labels, plot_font_size=plot_font_size, save_fig_as=save_history_fig_as)
 
-
     def create_cache_dir(self, spec_cache_code=None):
         if spec_cache_code is None:
             self.cache_path = './cache/ann/' + time.strftime('%Y%m%d%H%M') + '/'
@@ -539,18 +545,15 @@ class ANN:
             cycle_to_plot = [cycle_to_plot]
 
         prediction_mse = 0
-        time_vec = None
         predictions = None
         labels = None
 
         for cycle in cycle_to_plot:
             test_cycle = dataset[dataset.Trial == cycle]
-            # test_cycle = test_cycle[test_cycle.Time >= 0.0]
-            test_time = test_cycle.pop('Time')
+            test_cycle.pop('Time')
 
             if lstm:
                 test_cycle, test_labels, _ = gen_lstm_dataset(test_cycle, lstm_look_back)
-                test_time = test_time[lstm_look_back-1:]
 
                 if lstm_w_mlp:
                     test_cycle = {'emg_t_past': test_cycle, 'emg_t_now': test_cycle[:, -1]}
@@ -569,15 +572,11 @@ class ANN:
             if temp_mse > prediction_mse:
                 cycle_name = cycle
                 print(cycle_name)
-                time_vec = test_time
                 predictions = test_prediction
                 labels = test_labels
                 prediction_mse = temp_mse
 
         xvec = np.linspace(0, 100, num=len(labels))
-        # xvec = np.arange(0, 101)
-        # labels = saf.resample_signal(labels, len(xvec))
-        # predictions = saf.resample_signal(predictions, len(xvec))
 
         if title is None:
             title = cycle_name
@@ -590,8 +589,6 @@ class ANN:
         ax1.xaxis.set_major_formatter(xticks)
 
         ax1.set_title(title)
-        # ax1.set_xlabel('gait cycle duration[s]')
-        # ax1.set_ylabel('normalized joint moment')
         ax1.plot(xvec, labels, label='Test cycle')
         ax1.plot(xvec, predictions, label='Prediction')
         ax1.legend()
@@ -689,7 +686,6 @@ def gen_lstm_dataset(df, look_back, batch_size_case=1, get_cycle_list=False):
     trial_groups = [df for _, df in df_copy.groupby('Trial', sort=False)]
 
     for _, trial_group in df_copy.groupby('Trial', sort=False):
-    # for _, trial_group in df_copy.groupby('Trial'):
         trial_group.drop(columns=['Time', 'Trial'], errors='ignore', inplace=True)
         if batch_size_case == 1:
             trial_group = zero_pad_dataset(trial_group, longest_cycle)
@@ -827,8 +823,6 @@ def plot_history(histories, labels=None, plot_font_size=12, save_fig_as=None):
 
     fig = plt.figure(figsize=(7, 5))
     ax1 = plt.subplot()
-    # ax1.set_xlabel('Epoch')
-    # ax1.set_ylabel('Mean Square Error')
     if labels is None and len(histories) == 1:
         ax1.plot(histories[0]['epoch'], histories[0]['loss'],
                  label='Training set')

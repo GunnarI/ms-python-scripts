@@ -1,6 +1,4 @@
 import pandas as pd
-import matplotlib.pyplot as plt
-import time
 import warnings
 
 import data_manager as dm
@@ -8,10 +6,6 @@ import filters as filt
 import stat_analysis_functions as saf
 
 import ann_methods as ann
-
-# my_ann = ann.ANN()
-# my_ann.train_lstm(model_name='LSTM_lookback5_valsplit02')
-# train_tuple, validation_tuple = ann.generate_lstm_samples(my_ann.train_dataset, look_back=5)
 
 run_from_cache = True
 
@@ -150,30 +144,6 @@ if 'y' == prepare_data or 'yes' == prepare_data:
     subject05_all_set1 = update_df_w_muscle_set(muscle_full_set, muscle_set1,
                                                 my_dm.list_of_pandas['20190427 Subject05 filtered_data'])
 
-    # subject01_all_set1 = pd.concat([subject01_20190405_set1, subject01_20190603_set1], ignore_index=True)
-    # subject02_all_set1 = pd.concat([subject02_20190406_set1, subject02_20190608_set1], ignore_index=True)
-    # subject06_all_set0 = pd.concat([subject06_20190429_set0, subject06_20190509_set0], ignore_index=True)
-    # subject06_all_set1 = update_df_w_muscle_set(muscle_full_set, muscle_set1, subject06_all_set0)
-    #
-    # subject01_all_set2 = update_df_w_muscle_set(muscle_set1, muscle_set2, subject01_all_set1)
-    # subject02_all_set2 = update_df_w_muscle_set(muscle_set1, muscle_set2, subject02_all_set1)
-    # subject06_all_set2 = update_df_w_muscle_set(muscle_set1, muscle_set2, subject06_all_set1)
-    #
-    # subject01_all_set3 = update_df_w_muscle_set(muscle_set1, muscle_set3, subject01_all_set1)
-    # subject02_all_set3 = update_df_w_muscle_set(muscle_set1, muscle_set3, subject02_all_set1)
-    # subject06_all_set3 = update_df_w_muscle_set(muscle_set1, muscle_set3, subject06_all_set1)
-
-    # Cuts the data to cycles and caches the dataframes with the given names
-    # my_dm.cut_data_to_cycles(subject01_all_set1, 'subject01_all_set1', add_time=frames_to_add / freq)
-    # my_dm.cut_data_to_cycles(subject02_all_set1, 'subject02_all_set1', add_time=frames_to_add / freq)
-    # my_dm.cut_data_to_cycles(subject06_all_set1, 'subject06_all_set1', add_time=frames_to_add / freq)
-    # my_dm.cut_data_to_cycles(subject01_all_set2, 'subject01_all_set2', add_time=frames_to_add / freq)
-    # my_dm.cut_data_to_cycles(subject02_all_set2, 'subject02_all_set2', add_time=frames_to_add / freq)
-    # my_dm.cut_data_to_cycles(subject06_all_set2, 'subject06_all_set2', add_time=frames_to_add / freq)
-    # my_dm.cut_data_to_cycles(subject01_all_set3, 'subject01_all_set3', add_time=frames_to_add / freq)
-    # my_dm.cut_data_to_cycles(subject02_all_set3, 'subject02_all_set3', add_time=frames_to_add / freq)
-    # my_dm.cut_data_to_cycles(subject06_all_set3, 'subject06_all_set3', add_time=frames_to_add / freq)
-
     my_dm.cut_data_to_cycles(subject01_20190405_set1, 'subject01_20190405_set1', add_time=frames_to_add / freq)
     my_dm.cut_data_to_cycles(subject01_20190603_set1, 'subject01_20190603_set1', add_time=frames_to_add / freq)
 
@@ -185,30 +155,6 @@ if 'y' == prepare_data or 'yes' == prepare_data:
 
     my_dm.cut_data_to_cycles(subject06_20190429_set1, 'subject06_20190429_set1', add_time=frames_to_add / freq)
     my_dm.cut_data_to_cycles(subject06_20190509_set1, 'subject06_20190509_set1', add_time=frames_to_add / freq)
-
-    # Without frames_to_add to use for the analysis
-    # my_dm.cut_data_to_cycles(subject01_all_set1, 'subject01_all_set1_analysis')
-    # my_dm.cut_data_to_cycles(subject02_all_set1, 'subject02_all_set1_analysis')
-    # my_dm.cut_data_to_cycles(subject06_all_set1, 'subject06_all_set1_analysis')
-    # my_dm.cut_data_to_cycles(subject01_all_set2, 'subject01_all_set2_analysis')
-    # my_dm.cut_data_to_cycles(subject02_all_set2, 'subject02_all_set2_analysis')
-    # my_dm.cut_data_to_cycles(subject06_all_set2, 'subject06_all_set2_analysis')
-    # my_dm.cut_data_to_cycles(subject01_all_set3, 'subject01_all_set3_analysis')
-    # my_dm.cut_data_to_cycles(subject02_all_set3, 'subject02_all_set3_analysis')
-    # my_dm.cut_data_to_cycles(subject06_all_set3, 'subject06_all_set3_analysis')
-
-    # # Prepare full set
-    # subject126_all_set1 = pd.concat([my_dm.list_of_pandas['subject01_all_set1'],
-    #                                  my_dm.list_of_pandas['subject02_all_set1'],
-    #                                  my_dm.list_of_pandas['subject06_all_set1']], ignore_index=True)
-    # subject126_all_set1.name = 'subject126_all_set1'
-    # my_dm.update_pandas(subject126_all_set1)
-    #
-    # subject126partial_all_set1 = pd.concat([my_dm.list_of_pandas['subject01_all_set1'],
-    #                                         my_dm.list_of_pandas['subject02_all_set1'],
-    #                                         my_dm.list_of_pandas['subject06_20190429_set1']])
-    # subject126partial_all_set1.name = 'subject126partial_all_set1'
-    # my_dm.update_pandas(subject126partial_all_set1)
 else:
     print('Did not do data preparation! If this data is not already cached then there might be trouble!')
 
@@ -560,11 +506,6 @@ if evaluate_model:
     saf.compare_moment_avg(subject12356_all_set1_ann.test_dataset, my_dm.list_of_pandas['Case5_LSTM_Prediction'],
                            df1_legend='Actual', df2_legend='Prediction', plot_font_size=16,
                            save_fig_as='Case5_LSTM_test_prediction')
-
-    # subject06_LSTM_adam0001_64_02_00_4_relu_prediction = subject06_all_set1_ann.get_test_prediction(
-    #     'LSTM_adam0001_64_02_00_4_relu', lstm=True, lstm_look_back=4)
-    # subject06_allsplit_set1_ann_LSTM_adam_64_02_05_10_relu_bc1 = subject06_allsplit_set1_ann.get_test_prediction(
-    #     model_name='LSTM_adam_64_02_05_10_relu_bc1', lstm=True, lstm_look_back=10)
 
 # Find out number of cycles from each session
 get_num_cycles = False

@@ -1,14 +1,11 @@
-from deprecated import deprecated
 import os
 import logging
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
-import matplotlib.gridspec as gridspec
 import numpy as np
 import pandas as pd
 import seaborn as sns
 from scipy import signal as scisig
-from scipy import stats as scistat
 
 
 def get_min_med_max_cycles(df):
@@ -185,7 +182,6 @@ def plot_moment_avg(df, plot_min_med_max=False, plot_worst=False, title=None, xl
         print('The fastest cycle was: ' + min_cycle[0] + '\n\tTime steps: ' + str(min_cycle[1]))
         print('The slowest cycle was: ' + max_cycle[0] + '\n\tTime steps: ' + str(max_cycle[1]))
         ax1.plot(min_cycle_xvec, min_cycle_moments, label='Fastest cycle')
-        # ax1.plot(med_cycle_xvec, med_cycle_moments, label='Median cycle')
         ax1.plot(max_cycle_xvec, max_cycle_moments, label='Slowest cycle')
         ax1.legend(prop={'size': plot_font_size})
 
@@ -319,7 +315,6 @@ def plot_muscle_average(df, muscle_list=None, ylabel=None, y_axis_range=None, pl
 def plot_cycle_time_quartile(df, title='Gait cycle distribution', save_fig_as=None):
     time_intervals = df.groupby('Trial')['Time'].agg(np.ptp)
     fig, ax = plt.subplots(1, 1, figsize=(7, 2))
-    # ax = fig.add_subplot(111)
     plot_result = ax.boxplot(time_intervals, whis='range', vert=False)
     ax.set_title(title)
     ax.set_xlabel('Cycle duration [s]')
@@ -438,7 +433,6 @@ def plot_moment_derivative(df, plot_trial='average', muscle_list=None):
 
     moment_derivative = np.diff(moments)
 
-    #plt.figure()
     fig, ax1 = plt.subplots()
     ax1.set_xlabel('gait cycle duration[s]')
     ax1.set_ylabel(r'$\Delta$ joint moment $[\frac{N.mm}{kg.s}]$')
@@ -545,7 +539,6 @@ def resample_signal(signal, new_sample_length):
 
 
 def save_image_as(fig_object, directory, file_name):
-    # directory = './figures/moment_avg/'
     if not os.path.exists(directory):
         os.makedirs(directory)
     fig_object.savefig(directory + file_name + '.png', bbox_inches='tight')
